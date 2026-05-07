@@ -71,6 +71,12 @@ Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspectRatio, f
     P.m[10] = (farZ + nearZ) * nf;
     P.m[14] = (2.0f * farZ * nearZ) * nf;
 
+    // Vulkan / DirectX perspective matrix formula.
+    // DirectX/Vulkan z is from 0 to 1 (in opengl z is from -1 to 1)
+    // replace the two previews lines by this:
+    // P.m[10] = farZ / (farZ - nearZ);
+    // P.m[14] = -(farZ * nearZ) / (farZ - nearZ);
+
     // Column 3
     P.m[11] = -1.0f;
 
