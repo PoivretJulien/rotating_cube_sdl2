@@ -1,15 +1,24 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 project(rotating_cube)
+set(CMAKE_CXX_STANDARD 23)
 
-# if not installed install with -> "sudo apt install libsdl2-dev"
-# Find SDL2 package
-find_package(SDL2 REQUIRED)
-# Include directories for SDL2
-include_directories(${SDL2_INCLUDE_DIRS})
+# on linux install with: "sudo apt install libsdl2-dev libsdl2-ttf-dev"
+# SDL2 + SDL2_ttf via pkg-config (works on all Linux distros)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SDL2 REQUIRED sdl2)
+pkg_check_modules(SDL2TTF REQUIRED SDL2_ttf)
 
-# Define the math utility source
-set(MATH_SOURCES MathUtils.cpp)
+add_executable(${PROJECT_NAME}
+    main.cpp
+    MathUtils.cpp
+)
 
-# Target 1: The original version
-add_executable(${PROJECT_NAME} main.cpp ${MATH_SOURCES})
-target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARIES})
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${SDL2_INCLUDE_DIRS}
+    ${SDL2TTF_INCLUDE_DIRS}
+)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    ${SDL2_LIBRARIES}
+    ${SDL2TTF_LIBRARIES}
+)

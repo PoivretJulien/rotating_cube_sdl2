@@ -4,7 +4,8 @@
 
 #include <cmath>
 #include <iostream> // Kept for compatibility if debugging, but ideally should be minimized.
-
+#include<format>
+#include<string>
 // Define PI if not available (common in some environments)
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -17,6 +18,9 @@
  */
 struct Vector3 {
     float x, y, z;
+    inline std::string to_string(){
+        return std::format("({0},{1},{2})",x,y,z);
+    }
 };
 
 /**
@@ -34,6 +38,28 @@ struct Matrix4x4 {
     for (int i = 0; i < 16; ++i)
         m[i] = (i % 5 == 0) ? 1.0f : 0.0f;
     }
+    /**
+ * @brief Converts the 4x4 matrix into a readable string representation.
+ * 
+ * Formats the matrix row by row, which is useful for debugging or outputting 
+ * to a system like an SDL framebuffer console logging.
+ * Assumes column-major storage internally but outputs in row-major order (R0C0, R0C1...).
+ *
+ * @return std::string The string representation of the matrix.
+ */
+    inline std::string to_string(){
+         return std::format(
+            "|{0:^9.3f},{1:^9.3f},{2:^9.3f},{3:^9.3f}|\n"
+            "|{4:^9.3f},{5:^9.3f},{6:^9.3f},{7:^9.3f}|\n"
+            "|{8:^9.3f},{9:^9.3f},{10:^9.3f},{11:^9.3f}|\n"
+            "|{12:^9.3f},{13:^9.3f},{14:^9.3f},{15:^9.3f}|\n"
+            ,
+            m[0],m[1],m[2],m[3],
+            m[4],m[5],m[6],m[7],
+            m[8],m[9],m[10],m[11],
+            m[12],m[13],m[14],m[15]
+         );
+   }
 };
 
 // --- Linear Algebra Function Declarations ---
@@ -80,5 +106,6 @@ void camera_look_at(const Vector3& origin, const Vector3& target,
  */
 Matrix4x4 createViewMatrix(const Vector3& origin, const Vector3& target);
 
+Vector3 transform_vertex(const Matrix4x4& M, const Vector3& v);
 
 #endif // MATH_TYPES_H

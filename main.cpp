@@ -3,6 +3,7 @@
 #include <algorithm> // For std::max, std::min
 #include <cmath>
 #include <iostream>
+#include <print>
 #include <vector>
 
 // Constants for the cube definition and window size
@@ -102,8 +103,37 @@ void drawCubeEdges(SDL_Renderer *renderer, const std::vector<Point3D> &vertices,
   }
 }
 
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
+#include <string>
+
+void renderText(SDL_Renderer* renderer, const std::string& text, int x, int y,int font_size){
+    // Load a font (size 24)
+    TTF_Font* font = TTF_OpenFont("../0xProtoNerdFont-Bold.ttf", font_size);
+    if (!font) return;
+
+    SDL_Color color = {255, 255, 255, 255}; // white
+
+    // Render text to a surface
+    SDL_Surface* surface = TTF_RenderText_Blended(font, text.c_str(), color);
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+
+    SDL_Rect dst;
+    dst.x = x;
+    dst.y = y;
+    dst.w = surface->w;
+    dst.h = surface->h;
+
+    SDL_FreeSurface(surface);
+    TTF_CloseFont(font);
+
+    SDL_RenderCopy(renderer, texture, nullptr, &dst);
+    SDL_DestroyTexture(texture);
+}
+
 int main(int argc, char *argv[]) {
   // --- SDL Initialization ---
+  TTF_Init();
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
     std::cerr << "SDL could not initialize! SDL Error: " << SDL_GetError()
               << std::endl;
@@ -156,6 +186,19 @@ int main(int argc, char *argv[]) {
   bool quit = false;
   SDL_Event e;
 
+  auto m = Matrix4x4();
+  //translation vector.
+  m.m[12] = 2;
+  m.m[13] = 2;
+  m.m[14] = 2;
+  
+  Vector3 v {1,1,1};
+  Vector3 result  = transform_vertex(m, v);
+  auto txt = m.to_string();
+  std::println("Simple vertex translation:");
+  std::println("{0}",m.to_string());
+  std::println("{0}",result.to_string());
+
   while (!quit) {
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT) {
@@ -192,7 +235,7 @@ int main(int argc, char *argv[]) {
 
     origin = {x_cam, y_cam, z_cam}; // Camera Position
     target = {0.0f, 0.0f, 0.0f};    // Focus point (at the origin of the world)
-    
+
     // Build the View Matrix
     Matrix4x4 viewMatrix = createViewMatrix(origin, target);
 
@@ -204,6 +247,16 @@ int main(int argc, char *argv[]) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black screen
     SDL_RenderClear(renderer);
 
+    auto txt = viewMatrix.to_string();
+    auto a = txt.substr(0,41);
+    auto b = txt.substr(42,41);
+    auto c = txt.substr(84,41);
+    auto d = txt.substr(126,41);
+    renderText(renderer, "View matrix:", 50, 38,12);
+    renderText(renderer, a, 50, 50,12);
+    renderText(renderer, b, 50, 62,12);
+    renderText(renderer, c, 50, 74,12);
+    renderText(renderer, d, 50, 86,12);
     drawCubeEdges(renderer, cubeVertices, viewMatrix, projectionMatrix);
 
     // Update the screen with rendering commands
@@ -224,6 +277,7 @@ int main(int argc, char *argv[]) {
   // --- Cleanup ---
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
+  TTF_Quit();
   SDL_Quit();
 
   return 0;

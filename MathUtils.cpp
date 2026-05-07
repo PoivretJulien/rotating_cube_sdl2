@@ -1,5 +1,6 @@
 #include "MathTypes.h"
 #include <algorithm> // For std::max, std::min
+#include <string>   // Needed for to_string()
 
 // --- Function Implementations ---
 
@@ -133,6 +134,48 @@ void camera_look_at(const Vector3& origin, const Vector3& target,
     normalize(up);
 }
 
+/**
+ * @brief Multiplies a 3D vertex (treated as homogeneous coordinates) by a 4x4 matrix.
+ * 
+ * Performs R = M * V_homo and divides the result by W for perspective division.
+ * Assumes column-major storage for Matrix4x4.
+ *
+ * @param M The transformation matrix.
+ * @param v The input 3D vertex.
+ * @return Vector3 The transformed 3D vertex.
+ */
+Vector3 transform_vertex(const Matrix4x4& M, const Vector3& v) {
+    // Treat V as homogeneous coordinate (v.x, v.y, v.z, 1.0f)
+    float x = v.x;
+    float y = v.y;
+    float z = v.z;
+    float w_in = 1.0f;
+
+    // Calculate the transformed coordinates (R = M * V_homo)
+    // Components are calculated based on column-major storage: m[row + col*4]
+    
+    // R[0]: X component
+    float newX = M.m[0] * x + M.m[4] * y + M.m[8] * z + M.m[12] * w_in;
+
+    // R[1]: Y component
+    float newY = M.m[1] * x + M.m[5] * y + M.m[9] * z + M.m[13] * w_in;
+
+    // R[2]: Z component
+    float newZ = M.m[2] * x + M.m[6] * y + M.m[10] * z + M.m[14] * w_in;
+
+    // W component (for perspective division)
+    float newW = M.m[3] * x + M.m[7] * y + M.m[11] * z + M.m[15] * w_in;
+
+    if (std::abs(newW) > 1e-6f) {
+        // Perform perspective division
+        return {newX / newW, newY / newW, newZ / newW};
+    } else {
+        // Degenerate case or affine transform where w should be 1.0
+        // Return the raw XYZ if W is near zero to prevent division by zero/large errors.
+        return {newX, newY, newZ};
+    }
+}
+
 Matrix4x4 createViewMatrix(const Vector3& origin, const Vector3& target) {
     Vector3 right, up, forward;
     camera_look_at(origin, target, right, up, forward);
@@ -163,30 +206,6 @@ Matrix4x4 createViewMatrix(const Vector3& origin, const Vector3& target) {
 
     // Homogeneous bottom-right
     view.m[15] = 1.0f;
-
-    return view;
-}
-
-Matrix4x4 createViewMatrix_old(const Vector3& origin, const Vector3& target) {
-    Vector3 right, up, forward;
-    camera_look_at(origin, target, right, up, forward);
-
-    // The View Matrix is the inverse transformation: T * R 
-    Matrix4x4 view = Matrix4x4(); // Starts as Identity (defined in constructor)
-    for(int i=0; i<16; ++i) view.m[i] = 0.0f; // Zero out identity components first
-
-    // Column-major assignment for View Matrix components:
-    view.m[0]  = right.x;   view.m[4] = right.y;   view.m[8] = right.z;
-    view.m[1]  = up.x;     view.m[5] = up.y;     view.m[9] = up.z;
-    view.m[2]  = forward.x; view.m[6] = forward.y; view.m[10] = forward.z;
-
-    // Translation components (The negative dot products):
-    // T_x = -(R * O)
-    view.m[12] = -(right.x * origin.x + up.x * origin.y + forward.x * origin.z);
-    // T_y = -(U * O)
-    view.m[13] = -(right.y * origin.x + up.y * origin.y + forward.y * origin.z);
-    // T_z = -(F * O)
-    view.m[14] = -(right.z * origin.x + up.z * origin.y + forward.z * origin.z);
 
     return view;
 }
