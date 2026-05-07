@@ -34,22 +34,6 @@ struct Matrix4x4 {
     for (int i = 0; i < 16; ++i)
         m[i] = (i % 5 == 0) ? 1.0f : 0.0f;
     }
-
-    inline std::string to_string(){
-         return std::format(
-            "Matrix id: {16}\n"
-            "|{0:^9.3f},{1:^9.3f},{2:^9.3f},{3:^9.3f}|\n"
-            "|{4:^9.3f},{5:^9.3f},{6:^9.3f},{7:^9.3f}|\n"
-            "|{8:^9.3f},{9:^9.3f},{10:^9.3f},{11:^9.3f}|\n"
-            "|{12:^9.3f},{13:^9.3f},{14:^9.3f},{15:^9.3f}|\n"
-            ,
-            m[0],m[1],m[2],m[3],
-            m[4],m[5],m[6],m[7],
-            m[8],m[9],m[10],m[11],
-            m[12],m[13],m[14],m[15]
-            ,id
-         );
-   }
 };
 
 // --- Linear Algebra Function Declarations ---
