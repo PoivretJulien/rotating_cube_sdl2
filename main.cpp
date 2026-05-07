@@ -51,7 +51,7 @@ void drawCubeEdges(SDL_Renderer *renderer, const std::vector<Point3D> &vertices,
   for (size_t i = 0; i < vertices.size(); ++i) {
     // Model transformation M = Identity since the cube is stationary in world
     // space. The total transform T = P * V * I = P * V
-    Matrix4x4 totalTransform = multiply(projectionMatrix, viewMatrix);
+    Matrix4x4 totalTransform = multiply_unrolled(projectionMatrix, viewMatrix);
 
     // 3. TRANSFORM POINT: Apply the final transformation (P * V * I) to get
     // Clip Space coordinates
