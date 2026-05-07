@@ -46,6 +46,37 @@ Matrix4x4 multiply(const Matrix4x4& A, const Matrix4x4& B) {
     return C;
 }
 
+Matrix4x4 multiply_unrolled(const Matrix4x4& A, const Matrix4x4& B)
+{
+    Matrix4x4 C;
+
+    // Column 0
+    C.m[0]  = A.m[0]*B.m[0]  + A.m[4]*B.m[1]  + A.m[8]*B.m[2]   + A.m[12]*B.m[3];
+    C.m[1]  = A.m[1]*B.m[0]  + A.m[5]*B.m[1]  + A.m[9]*B.m[2]   + A.m[13]*B.m[3];
+    C.m[2]  = A.m[2]*B.m[0]  + A.m[6]*B.m[1]  + A.m[10]*B.m[2]  + A.m[14]*B.m[3];
+    C.m[3]  = A.m[3]*B.m[0]  + A.m[7]*B.m[1]  + A.m[11]*B.m[2]  + A.m[15]*B.m[3];
+
+    // Column 1
+    C.m[4]  = A.m[0]*B.m[4]  + A.m[4]*B.m[5]  + A.m[8]*B.m[6]   + A.m[12]*B.m[7];
+    C.m[5]  = A.m[1]*B.m[4]  + A.m[5]*B.m[5]  + A.m[9]*B.m[6]   + A.m[13]*B.m[7];
+    C.m[6]  = A.m[2]*B.m[4]  + A.m[6]*B.m[5]  + A.m[10]*B.m[6]  + A.m[14]*B.m[7];
+    C.m[7]  = A.m[3]*B.m[4]  + A.m[7]*B.m[5]  + A.m[11]*B.m[6]  + A.m[15]*B.m[7];
+
+    // Column 2
+    C.m[8]  = A.m[0]*B.m[8]  + A.m[4]*B.m[9]  + A.m[8]*B.m[10]  + A.m[12]*B.m[11];
+    C.m[9]  = A.m[1]*B.m[8]  + A.m[5]*B.m[9]  + A.m[9]*B.m[10]  + A.m[13]*B.m[11];
+    C.m[10] = A.m[2]*B.m[8]  + A.m[6]*B.m[9]  + A.m[10]*B.m[10] + A.m[14]*B.m[11];
+    C.m[11] = A.m[3]*B.m[8]  + A.m[7]*B.m[9]  + A.m[11]*B.m[10] + A.m[15]*B.m[11];
+
+    // Column 3
+    C.m[12] = A.m[0]*B.m[12] + A.m[4]*B.m[13] + A.m[8]*B.m[14]  + A.m[12]*B.m[15];
+    C.m[13] = A.m[1]*B.m[12] + A.m[5]*B.m[13] + A.m[9]*B.m[14]  + A.m[13]*B.m[15];
+    C.m[14] = A.m[2]*B.m[12] + A.m[6]*B.m[13] + A.m[10]*B.m[14] + A.m[14]*B.m[15];
+    C.m[15] = A.m[3]*B.m[12] + A.m[7]*B.m[13] + A.m[11]*B.m[14] + A.m[15]*B.m[15];
+
+    return C;
+}
+
 
 Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspectRatio, float nearZ, float farZ) {
     Matrix4x4 P;
