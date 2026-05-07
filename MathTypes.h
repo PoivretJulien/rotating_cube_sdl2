@@ -35,7 +35,7 @@ struct Matrix4x4 {
         m[i] = (i % 5 == 0) ? 1.0f : 0.0f;
     }
 
-    std::string to_string(){
+    inline std::string to_string(){
          return std::format(
             "Matrix id: {16}\n"
             "|{0:^9.3f},{1:^9.3f},{2:^9.3f},{3:^9.3f}|\n"
