@@ -59,6 +59,11 @@ Vector3 cross_product(const Vector3& a, const Vector3& b);
 Matrix4x4 multiply(const Matrix4x4& A, const Matrix4x4& B);
 
 /**
+ * @brief Multiplies two matrices: Result = A * B (A is on the left).
+ */
+Matrix4x4 multiply_unrolled(const Matrix4x4& A, const Matrix4x4& B);
+
+/**
  * @brief Creates a Perspective Projection Matrix (P).
  */
 Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspectRatio, float nearZ, float farZ);
