@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.16)
 project(rotating_cube)
 set(CMAKE_CXX_STANDARD 23)
 
-# on linux install with: "sudo apt install libsdl2-dev libsdl2-ttf-dev"
 # SDL2 + SDL2_ttf via pkg-config (works on all Linux distros)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL2 REQUIRED sdl2)

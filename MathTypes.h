@@ -60,6 +60,19 @@ struct Matrix4x4 {
             m[12],m[13],m[14],m[15]
          );
    }
+   inline std::string to_string_column_major(){
+         return std::format(
+            "|{0:^9.3f},{1:^9.3f},{2:^9.3f},{3:^9.3f}|\n"
+            "|{4:^9.3f},{5:^9.3f},{6:^9.3f},{7:^9.3f}|\n"
+            "|{8:^9.3f},{9:^9.3f},{10:^9.3f},{11:^9.3f}|\n"
+            "|{12:^9.3f},{13:^9.3f},{14:^9.3f},{15:^9.3f}|\n"
+            ,
+            m[0],m[4],m[8],m[12],
+            m[1],m[5],m[9],m[13],
+            m[2],m[6],m[10],m[14],
+            m[3],m[7],m[11],m[15]
+         );
+   }
 };
 
 // --- Linear Algebra Function Declarations ---
