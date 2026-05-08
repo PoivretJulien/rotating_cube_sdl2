@@ -1,5 +1,6 @@
 #include "MathTypes.h"
 #include <algorithm> // For std::max, std::min
+#include <cmath>
 #include <string>   // Needed for to_string()
 
 // --- Function Implementations ---
@@ -16,6 +17,12 @@ float normalize(Vector3& v) {
         v.z /= length;
     }
     return length;
+}
+
+float dot_product(const Vector3& a, const Vector3& b) {
+    return 
+        a.x*b.x+a.y*b.y+a.z*b.z
+    ;
 }
 
 Vector3 cross_product(const Vector3& a, const Vector3& b) {
@@ -111,7 +118,32 @@ Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspectRatio, f
     return P;
 }
 
-void camera_look_at(const Vector3& origin, const Vector3& target, 
+void camera_look_at(const Vector3& origin, const Vector3& target,
+                    Vector3& right, Vector3& up, Vector3& forward)
+{
+    // Forward (Z axis)
+    forward = subtract(target, origin);
+    normalize(forward);
+
+    // Choose a world-up that is NOT parallel to forward
+    Vector3 temp_world_up = {0.0f, 1.0f, 0.0f};
+
+    // If forward is too close to world-up, pick another up vector
+    if (fabs(dot_product(forward, temp_world_up)) > 0.999f) {
+        temp_world_up = {1.0f, 0.0f, 0.0f};
+    }
+
+    // Right (X axis)
+    right = cross_product(temp_world_up, forward);
+    normalize(right);
+
+    // Up (Y axis)
+    up = cross_product(forward, right);
+    normalize(up);
+}
+
+
+void camera_look_at_(const Vector3& origin, const Vector3& target, 
                      Vector3& right, Vector3& up, Vector3& forward) {
     
     // Calculate Z-axis (Forward vector: from Origin to Target)
@@ -126,29 +158,6 @@ void camera_look_at(const Vector3& origin, const Vector3& target,
     normalize(right);
 
     // Calculate Y-axis (Actual Up vector): Must be perpendicular to both Right and Forward
-    up = cross_product(forward, right);
-    normalize(up);
-}
-void camera_look_at(const Vector3& origin, const Vector3& target,
-                    Vector3& right, Vector3& up, Vector3& forward)
-{
-    // Forward (Z axis)
-    forward = subtract(target, origin);
-    normalize(forward);
-
-    // Choose a world-up that is NOT parallel to forward
-    Vector3 temp_world_up = {0.0f, 1.0f, 0.0f};
-
-    // If forward is too close to world-up, pick another up vector
-    if (fabs(dot(forward, temp_world_up)) > 0.999f) {
-        temp_world_up = {1.0f, 0.0f, 0.0f};
-    }
-
-    // Right (X axis)
-    right = cross_product(temp_world_up, forward);
-    normalize(right);
-
-    // Up (Y axis)
     up = cross_product(forward, right);
     normalize(up);
 }
