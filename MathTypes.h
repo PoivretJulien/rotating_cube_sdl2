@@ -42,7 +42,10 @@ struct Matrix4x4 {
     0,0,1,0,
     0,0,0,1,
   }{}
-
+ /*
+    @brief init the struct at zero onthe whole natrix
+    usage: Matrix4x4 matrix {0};
+ */
   Matrix4x4(int) :m{
     0,0,0,0,
     0,0,0,0,
