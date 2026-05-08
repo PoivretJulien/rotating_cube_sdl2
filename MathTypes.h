@@ -1,11 +1,12 @@
-// MathTypes.h - Contains common math structures and declarations for App3 3D rendering.
+// MathTypes.h - Contains common math structures and declarations for App3 3D
+// rendering.
 #ifndef MATH_TYPES_H
 #define MATH_TYPES_H
 
 #include <cmath>
+#include <format>
 #include <iostream> // Kept for compatibility if debugging, but ideally should be minimized.
-#include<format>
-#include<string>
+#include <string>
 // Define PI if not available (common in some environments)
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -17,62 +18,65 @@
  * @brief Vector structure used throughout the math library.
  */
 struct Vector3 {
-    float x, y, z;
-    inline std::string to_string(){
-        return std::format("({0},{1},{2})",x,y,z);
-    }
+  float x, y, z;
+  inline std::string to_string() {
+    return std::format("({0},{1},{2})", x, y, z);
+  }
 };
 
 /**
  * @brief 4x4 Matrix stored in column-major order (m[row + col*4])
- *        Assuming standard OpenGL/DirectX indexing convention for consistency with rendering logic.
+ *        Assuming standard OpenGL/DirectX indexing convention for consistency
+ * with rendering logic.
  */
 struct Matrix4x4 {
-    // m[0] m[4] m[8] m[12] -> X components (Row 0)
-    // m[1] m[5] m[9] m[13] -> Y components (Row 1)
-    // m[2] m[6] m[10] m[14] -> Z components (Row 2)
-    // m[3] m[7] m[11] m[15] -> W components (Row 3)
-    float m[16]; 
+  // m[0] m[4] m[8] m[12] -> X components (Row 0)
+  // m[1] m[5] m[9] m[13] -> Y components (Row 1)
+  // m[2] m[6] m[10] m[14] -> Z components (Row 2)
+  // m[3] m[7] m[11] m[15] -> W components (Row 3)
+  float m[16];
 
-    Matrix4x4() {
-    for (int i = 0; i < 16; ++i)
-        m[i] = (i % 5 == 0) ? 1.0f : 0.0f;
-    }
-    /**
- * @brief Converts the 4x4 matrix into a readable string representation.
- * 
- * Formats the matrix row by row, which is useful for debugging or outputting 
- * to a system like an SDL framebuffer console logging.
- * Assumes column-major storage internally but outputs in row-major order (R0C0, R0C1...).
- *
- * @return std::string The string representation of the matrix.
- */
-    inline std::string to_string(){
-         return std::format(
-            "|{0:^9.3f},{1:^9.3f},{2:^9.3f},{3:^9.3f}|\n"
-            "|{4:^9.3f},{5:^9.3f},{6:^9.3f},{7:^9.3f}|\n"
-            "|{8:^9.3f},{9:^9.3f},{10:^9.3f},{11:^9.3f}|\n"
-            "|{12:^9.3f},{13:^9.3f},{14:^9.3f},{15:^9.3f}|\n"
-            ,
-            m[0],m[1],m[2],m[3],
-            m[4],m[5],m[6],m[7],
-            m[8],m[9],m[10],m[11],
-            m[12],m[13],m[14],m[15]
-         );
-   }
-   inline std::string to_string_column_major(){
-         return std::format(
-            "|{0:^9.3f},{1:^9.3f},{2:^9.3f},{3:^9.3f}|\n"
-            "|{4:^9.3f},{5:^9.3f},{6:^9.3f},{7:^9.3f}|\n"
-            "|{8:^9.3f},{9:^9.3f},{10:^9.3f},{11:^9.3f}|\n"
-            "|{12:^9.3f},{13:^9.3f},{14:^9.3f},{15:^9.3f}|\n"
-            ,
-            m[0],m[4],m[8],m[12],
-            m[1],m[5],m[9],m[13],
-            m[2],m[6],m[10],m[14],
-            m[3],m[7],m[11],m[15]
-         );
-   }
+  Matrix4x4() :m{
+    1,0,0,0,
+    0,1,0,0,
+    0,0,1,0,
+    0,0,0,1,
+  }{}
+
+  Matrix4x4(int) :m{
+    0,0,0,0,
+    0,0,0,0,
+    0,0,0,0,
+    0,0,0,0,
+  }{}
+
+
+  /**
+   * @brief Converts the 4x4 matrix into a readable string representation.
+   *
+   * Formats the matrix row by row, which is useful for debugging or outputting
+   * to a system like an SDL framebuffer console logging.
+   * Assumes column-major storage internally but outputs in row-major order
+   * (R0C0, R0C1...).
+   *
+   * @return std::string The string representation of the matrix.
+   */
+  inline std::string to_string() {
+    return std::format("|{0:^9.3f},{1:^9.3f},{2:^9.3f},{3:^9.3f}|\n"
+                       "|{4:^9.3f},{5:^9.3f},{6:^9.3f},{7:^9.3f}|\n"
+                       "|{8:^9.3f},{9:^9.3f},{10:^9.3f},{11:^9.3f}|\n"
+                       "|{12:^9.3f},{13:^9.3f},{14:^9.3f},{15:^9.3f}|\n",
+                       m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8],
+                       m[9], m[10], m[11], m[12], m[13], m[14], m[15]);
+  }
+  inline std::string to_string_column_major() {
+    return std::format("|{0:^9.3f},{1:^9.3f},{2:^9.3f},{3:^9.3f}|\n"
+                       "|{4:^9.3f},{5:^9.3f},{6:^9.3f},{7:^9.3f}|\n"
+                       "|{8:^9.3f},{9:^9.3f},{10:^9.3f},{11:^9.3f}|\n"
+                       "|{12:^9.3f},{13:^9.3f},{14:^9.3f},{15:^9.3f}|\n",
+                       m[0], m[4], m[8], m[12], m[1], m[5], m[9], m[13], m[2],
+                       m[6], m[10], m[14], m[3], m[7], m[11], m[15]);
+  }
 };
 
 // --- Linear Algebra Function Declarations ---
@@ -80,45 +84,48 @@ struct Matrix4x4 {
 /**
  * @brief Helper function for vector subtraction (A - B).
  */
-Vector3 subtract(const Vector3& a, const Vector3& b);
+Vector3 subtract(const Vector3 &a, const Vector3 &b);
 
 /**
- * @brief Helper function for normalization (calculating unit vector) and returns original length.
+ * @brief Helper function for normalization (calculating unit vector) and
+ * returns original length.
  */
-float normalize(Vector3& v);
+float normalize(Vector3 &v);
 
 /**
  * @brief Calculates the cross product of two vectors (A x B).
  */
-Vector3 cross_product(const Vector3& a, const Vector3& b);
+Vector3 cross_product(const Vector3 &a, const Vector3 &b);
 
 /**
  * @brief Multiplies two matrices: Result = A * B (A is on the left).
  */
-Matrix4x4 multiply(const Matrix4x4& A, const Matrix4x4& B);
+Matrix4x4 multiply(const Matrix4x4 &A, const Matrix4x4 &B);
 
 /**
  * @brief Multiplies two matrices: Result = A * B (A is on the left).
  */
-Matrix4x4 multiply_unrolled(const Matrix4x4& A, const Matrix4x4& B);
+Matrix4x4 multiply_unrolled(const Matrix4x4 &A, const Matrix4x4 &B);
 
 /**
  * @brief Creates a Perspective Projection Matrix (P).
  */
-Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspectRatio, float nearZ, float farZ);
-
-
-/**
- * @brief Calculates the orthonormal basis vectors [right, up, forward]. (Camera LookAt implementation)
- */
-void camera_look_at(const Vector3& origin, const Vector3& target, 
-                     Vector3& right, Vector3& up, Vector3& forward);
+Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspectRatio,
+                                            float nearZ, float farZ);
 
 /**
- * @brief Builds a View Matrix that transforms coordinates from World Space to Camera View Space.
+ * @brief Calculates the orthonormal basis vectors [right, up, forward]. (Camera
+ * LookAt implementation)
  */
-Matrix4x4 createViewMatrix(const Vector3& origin, const Vector3& target);
+void camera_look_at(const Vector3 &origin, const Vector3 &target,
+                    Vector3 &right, Vector3 &up, Vector3 &forward);
 
-Vector3 transform_vertex(const Matrix4x4& M, const Vector3& v);
+/**
+ * @brief Builds a View Matrix that transforms coordinates from World Space to
+ * Camera View Space.
+ */
+Matrix4x4 createViewMatrix(const Vector3 &origin, const Vector3 &target);
+
+Vector3 transform_vertex(const Matrix4x4 &M, const Vector3 &v);
 
 #endif // MATH_TYPES_H

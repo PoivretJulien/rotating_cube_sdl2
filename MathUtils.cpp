@@ -80,11 +80,7 @@ Matrix4x4 multiply_unrolled(const Matrix4x4& A, const Matrix4x4& B)
 
 
 Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspectRatio, float nearZ, float farZ) {
-    Matrix4x4 P;
-
-    // Zero out the matrix
-    for (int i = 0; i < 16; ++i)
-        P.m[i] = 0.0f;
+    Matrix4x4 P {0};// zeroed init.
 
     float fovY = fovY_deg * (M_PI / 180.0f);
     float f = 1.0f / std::tan(fovY * 0.5f);
@@ -180,11 +176,13 @@ Matrix4x4 createViewMatrix(const Vector3& origin, const Vector3& target) {
     Vector3 right, up, forward;
     camera_look_at(origin, target, right, up, forward);
 
-    Matrix4x4 view;
+    Matrix4x4 view = Matrix4x4();
 
-    // Zero out
-    for (int i = 0; i < 16; ++i)
-        view.m[i] = 0.0f;
+/*
+// Zero out
+for (int i = 0; i < 16; ++i)
+view.m[i] = 0.0f;
+*/
 
     // Orientation (column-major)
     view.m[0]  = right.x;

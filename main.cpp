@@ -312,6 +312,10 @@ int main(int argc, char *argv[]) {
   std::println("{0}", m.to_string_column_major());
   std::println("{0}", result.to_string());
 
+  // Projection Setup (Remains constant)
+  Matrix4x4 projectionMatrix = createPerspectiveProjectionMatrix(
+        35.0f, (float)WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 500.0f);
+
   while (!quit) {
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT) {
@@ -351,15 +355,11 @@ int main(int argc, char *argv[]) {
 
     // Build the View Matrix
     Matrix4x4 viewMatrix = createViewMatrix(origin, target);
-
-    // 2. Projection Setup (Remains constant)
-    Matrix4x4 projectionMatrix = createPerspectiveProjectionMatrix(
-        35.0f, (float)WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 500.0f);
-
-    // 3. Drawing Steps
+    
+    // 2. Drawing Steps
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black screen
     SDL_RenderClear(renderer);
-
+    // Parse view matrix on screen
     auto txt = viewMatrix.to_string_column_major();
     auto a = txt.substr(0, 41);
     auto b = txt.substr(42, 41);
