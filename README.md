@@ -1,1 +1,1 @@
-Cube become pyramyde for visual orientation marker.
+Cube become pyramyd (for visual orientation marker).
