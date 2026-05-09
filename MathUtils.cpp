@@ -162,6 +162,40 @@ void camera_look_at_(const Vector3& origin, const Vector3& target,
     normalize(up);
 }
 
+// not working yet
+void camera_look_at_quaternion(const Vector3& origin, const Vector3& target,
+                                Vector3& right, Vector3& up, Vector3& forward) {
+    
+    forward = normalize(subtract(target, origin));
+    
+    // Create a rotation from world Y-up to the desired forward direction
+    Vector3 world_up = {0.0f, 1.0f, 0.0f};
+    Vector3 rotation_axis = cross_product(world_up, forward);
+    
+    if (length(rotation_axis) < 0.0001f) {
+        // Parallel case: no rotation needed or 180-degree rotation
+        if (dot_product(world_up, forward) > 0) {
+            right = {1, 0, 0};
+            up = {0, 1, 0};
+        } else {
+            right = {1, 0, 0};
+            up = {0, -1, 0};
+        }
+    } else {
+        normalize(rotation_axis);
+        float angle = acos(dot_product(world_up, forward));
+        
+        // Axis-angle to rotation matrix conversion
+        float c = cos(angle);
+        float s = sin(angle);
+        float t = 1 - c;
+        float x = rotation_axis.x, y = rotation_axis.y, z = rotation_axis.z;
+        
+        right.x = t*x*x + c;    right.y = t*x*y + s*z;  right.z = t*x*z - s*y;
+        up.x = t*x*y - s*z;     up.y = t*y*y + c;       up.z = t*y*z + s*x;
+        // forward is already calculated
+    }
+}
 /**
  * @brief Multiplies a 3D vertex (treated as homogeneous coordinates) by a 4x4 matrix.
  * 
