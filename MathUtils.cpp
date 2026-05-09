@@ -59,6 +59,71 @@ Matrix4x4 multiply_unrolled(const Matrix4x4& A, const Matrix4x4& B)
     return C;
 }
 
+Matrix4x4 BuildViewMatrixFromEuler(float yaw, float pitch, float roll, const Vector3& pos)
+{
+    Matrix4x4 M;
+
+    // --- Build quaternion from yaw (Y), pitch (X), roll (Z) ---
+    float cy = cosf(yaw   * 0.5f);
+    float sy = sinf(yaw   * 0.5f);
+    float cp = cosf(pitch * 0.5f);
+    float sp = sinf(pitch * 0.5f);
+    float cr = cosf(roll  * 0.5f);
+    float sr = sinf(roll  * 0.5f);
+
+    // Quaternion multiplication order: q = yaw * pitch * roll
+    // (Y * X * Z) — standard for FPS/CAD cameras
+    float qw = cy*cp*cr + sy*sp*sr;
+    float qx = cy*sp*cr + sy*cp*sr;
+    float qy = sy*cp*cr - cy*sp*sr;
+    float qz = cy*cp*sr - sy*sp*cr;
+
+    // --- Extract basis vectors from quaternion ---
+    // Right (+X)
+    Vector3 right(
+        1 - 2*(qy*qy + qz*qz),
+        2*(qx*qy + qw*qz),
+        2*(qx*qz - qw*qy)
+    );
+
+    // Up (+Y)
+    Vector3 up(
+        2*(qx*qy - qw*qz),
+        1 - 2*(qx*qx + qz*qz),
+        2*(qy*qz + qw*qx)
+    );
+
+    // Forward (-Z in OpenGL)
+    Vector3 forward(
+        2*(qx*qz + qw*qy),
+        2*(qy*qz - qw*qx),
+        1 - 2*(qx*qx + qy*qy)
+    );
+
+    // --- Build OpenGL view matrix (column-major) ---
+    M.m[0] = right.x;
+    M.m[1] = up.x;
+    M.m[2] = -forward.x;
+    M.m[3] = 0.0f;
+
+    M.m[4] = right.y;
+    M.m[5] = up.y;
+    M.m[6] = -forward.y;
+    M.m[7] = 0.0f;
+
+    M.m[8]  = right.z;
+    M.m[9]  = up.z;
+    M.m[10] = -forward.z;
+    M.m[11] = 0.0f;
+
+    // Translation = -Rᵀ * pos
+    M.m[12] = -(right.x * pos.x + right.y * pos.y + right.z * pos.z);
+    M.m[13] = -(up.x    * pos.x + up.y    * pos.y + up.z    * pos.z);
+    M.m[14] =  (forward.x * pos.x + forward.y * pos.y + forward.z * pos.z);
+    M.m[15] = 1.0f;
+
+    return M;
+}
 
 Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspectRatio, float nearZ, float farZ) {
     Matrix4x4 P {0};// zeroed init.
@@ -134,72 +199,6 @@ Vector3 transform_vertex(const Matrix4x4& M, const Vector3& v) {
     }
 }
 
-Matrix4x4 BuildViewMatrixFromEuler(float yaw, float pitch, float roll, const Vec3& pos)
-{
-    Matrix4x4 M;
-
-    // --- Build quaternion from yaw (Y), pitch (X), roll (Z) ---
-    float cy = cosf(yaw   * 0.5f);
-    float sy = sinf(yaw   * 0.5f);
-    float cp = cosf(pitch * 0.5f);
-    float sp = sinf(pitch * 0.5f);
-    float cr = cosf(roll  * 0.5f);
-    float sr = sinf(roll  * 0.5f);
-
-    // Quaternion multiplication order: q = yaw * pitch * roll
-    // (Y * X * Z) — standard for FPS/CAD cameras
-    float qw = cy*cp*cr + sy*sp*sr;
-    float qx = cy*sp*cr + sy*cp*sr;
-    float qy = sy*cp*cr - cy*sp*sr;
-    float qz = cy*cp*sr - sy*sp*cr;
-
-    // --- Extract basis vectors from quaternion ---
-    // Right (+X)
-    Vec3 right(
-        1 - 2*(qy*qy + qz*qz),
-        2*(qx*qy + qw*qz),
-        2*(qx*qz - qw*qy)
-    );
-
-    // Up (+Y)
-    Vec3 up(
-        2*(qx*qy - qw*qz),
-        1 - 2*(qx*qx + qz*qz),
-        2*(qy*qz + qw*qx)
-    );
-
-    // Forward (-Z in OpenGL)
-    Vec3 forward(
-        2*(qx*qz + qw*qy),
-        2*(qy*qz - qw*qx),
-        1 - 2*(qx*qx + qy*qy)
-    );
-
-    // --- Build OpenGL view matrix (column-major) ---
-    M.m[0] = right.x;
-    M.m[1] = up.x;
-    M.m[2] = -forward.x;
-    M.m[3] = 0.0f;
-
-    M.m[4] = right.y;
-    M.m[5] = up.y;
-    M.m[6] = -forward.y;
-    M.m[7] = 0.0f;
-
-    M.m[8]  = right.z;
-    M.m[9]  = up.z;
-    M.m[10] = -forward.z;
-    M.m[11] = 0.0f;
-
-    // Translation = -Rᵀ * pos
-    M.m[12] = -(right.x * pos.x + right.y * pos.y + right.z * pos.z);
-    M.m[13] = -(up.x    * pos.x + up.y    * pos.y + up.z    * pos.z);
-    M.m[14] =  (forward.x * pos.x + forward.y * pos.y + forward.z * pos.z);
-    M.m[15] = 1.0f;
-
-    return M;
-}
-
 
 Matrix4x4 look_at_view(const Vector3& eye,
                      const Vector3& target,
@@ -211,6 +210,7 @@ Matrix4x4 look_at_view(const Vector3& eye,
 
     // Choose a stable up
     Vector3 up = world_up;
+
     if (fabs(dot_product(f, up)) > 0.999f)
         up = {1,0,0};
 
@@ -240,8 +240,8 @@ Matrix4x4 look_at_view_quat(const Vector3& eye,
     normalize(f);
 
     // 2. Stable world-up
-    if (fabs(dot_product(f, world_up)) > 0.999f)
-        world_up  = {1, 0, 0};
+    if (fabs(dot_product(f, world_up)) > 0.99999f)
+        world_up  = {1, 0, 1};
 
     // 3. Build orthonormal basis
     Vector3 r = cross_product(world_up, f);

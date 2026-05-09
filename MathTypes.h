@@ -5,7 +5,6 @@
 
 #include <cmath>
 #include <format>
-#include <iostream> // Kept for compatibility if debugging, but ideally should be minimized.
 #include <string>
 // Define PI if not available (common in some environments)
 #ifndef M_PI
@@ -19,6 +18,9 @@
  */
 struct Vector3 {
   float x, y, z;
+  inline Vector3 to_opengl() const{
+    return {x,z,y};
+  }
   inline std::string to_string() {
     return std::format("({0},{1},{2})", x, y, z);
   }
@@ -36,19 +38,14 @@ struct Matrix4x4 {
   // m[3] m[7] m[11] m[15] -> W components (Row 3)
   float m[16];
 
-  Matrix4x4() :m{
+  inline static Matrix4x4 indentity(){
+    return {
     1,0,0,0,
     0,1,0,0,
     0,0,1,0,
     0,0,0,1,
-  }{}
-
-  Matrix4x4(int) :m{
-    0,0,0,0,
-    0,0,0,0,
-    0,0,0,0,
-    0,0,0,0,
-  }{}
+  };
+  }
 
   /**
    * @brief Converts the 4x4 matrix into a readable string representation.
@@ -126,7 +123,7 @@ inline float dot_product(const Vector3& a, const Vector3& b) {
     ;
 }
 
-
+Matrix4x4 BuildViewMatrixFromEuler(float yaw, float pitch, float roll, const Vector3& pos);
 
 inline Vector3 cross_product(const Vector3& a, const Vector3& b) {
     return {

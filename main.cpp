@@ -3,6 +3,8 @@
 #include <SDL2/SDL_ttf.h>
 #include <algorithm> // For std::max, std::min
 #include <cmath>
+
+#include <cstddef>
 #include <iostream>
 #include <print>
 #include <string>
@@ -23,6 +25,24 @@ struct SDLPoint {
 // Structure to hold a 3D point in world space
 struct Point3D {
   float x, y, z;
+  /**
+      (swap z and y)
+  */ 
+  constexpr inline Point3D to_opengl(){
+    return {x,z,y};
+  } 
+  inline void scale(float factor){
+    x*=factor;
+    y*=factor;
+    z*=factor;
+  }
+
+  Point3D& operator * (float const& factor){
+    x*=factor; 
+    y*=factor; 
+    z*=factor; 
+    return *this;
+  }
 };
 
 // --- Coordinate Conversion Helper ---
@@ -236,9 +256,18 @@ void drawCubeEdges(SDL_Renderer *renderer, const std::vector<Point3D> &vertices,
 Vector3 circular_orbit(float radius, float angle_radians, float height)
 {
     Vector3 pos;
-    pos.x = radius * cos(angle_radians);
-    pos.z = radius * sin(angle_radians);
-    pos.y = height;
+     pos.x = radius * cos(angle_radians);
+     pos.z = radius * sin(angle_radians);
+     pos.y = height;
+    return pos;
+}
+
+Vector3 circular_orbit_transversal(float radius, float angle_radians)
+{
+     Vector3 pos;
+     pos.z = radius * cos(angle_radians);
+     pos.y = radius * sin(angle_radians);
+     pos.x = 100;   
     return pos;
 }
 
@@ -282,18 +311,36 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  float tip =100;
-  // --- Cube Setup (Centered, Stationary) ---
-  std::vector<Point3D> cubeVertices = {
-      {-CUBE_SIZE / 2, -CUBE_SIZE / 2, CUBE_SIZE / 2},  // 0: Back bottom left
-      {CUBE_SIZE / 2, -CUBE_SIZE / 2, CUBE_SIZE / 2},   // 1: Back bottom right
-      {CUBE_SIZE / tip, CUBE_SIZE / tip, CUBE_SIZE / tip},    // 2: Back top right
-      {-CUBE_SIZE / tip, CUBE_SIZE / tip, CUBE_SIZE / tip},   // 3: Back top left
-      {-CUBE_SIZE / 2, -CUBE_SIZE / 2, -CUBE_SIZE / 2}, // 4: Front bottom left
-      {CUBE_SIZE / 2, -CUBE_SIZE / 2, -CUBE_SIZE / 2},  // 5: Front bottom right
-      {CUBE_SIZE / tip, CUBE_SIZE / tip, -CUBE_SIZE / tip},   // 6: Front top right
-      {-CUBE_SIZE / tip, CUBE_SIZE / tip, -CUBE_SIZE / tip}   // 7: Front top left
+ // ( world system z up )
+    std::vector<Point3D> my_geometry{
+    {1,-1,0},
+    {1,1,0},
+    {-1,1,0},
+    {-1,-1,0},
+    {.01,-.01,2.5},
+    {.01,.01,2.5},
+    {-.01,.01,2.5},
+    {-.01,-.01,2.5},
   };
+
+  for(auto& vertex:my_geometry){
+    vertex = vertex.to_opengl()*(CUBE_SIZE*0.25);
+  }
+
+/*
+float tip =100;
+// --- Cube Setup (Centered, Stationary) ---
+std::vector<Point3D> cubeVertices = {
+  {-CUBE_SIZE / 2, -CUBE_SIZE / 2, CUBE_SIZE / 2},  // 0: Back bottom left
+  {CUBE_SIZE / 2, -CUBE_SIZE / 2, CUBE_SIZE / 2},   // 1: Back bottom right
+  {CUBE_SIZE / tip, CUBE_SIZE / tip, CUBE_SIZE / tip},    // 2: Back top right
+  {-CUBE_SIZE / tip, CUBE_SIZE / tip, CUBE_SIZE / tip},   // 3: Back top left
+  {-CUBE_SIZE / 2, -CUBE_SIZE / 2, -CUBE_SIZE / 2}, // 4: Front bottom left
+  {CUBE_SIZE / 2, -CUBE_SIZE / 2, -CUBE_SIZE / 2},  // 5: Front bottom right
+  {CUBE_SIZE / tip, CUBE_SIZE / tip, -CUBE_SIZE / tip},   // 6: Front top right
+  {-CUBE_SIZE / tip, CUBE_SIZE / tip, -CUBE_SIZE / tip}   // 7: Front top left
+};
+*/
 
   // --- Camera Control Variables ---
   float angle = 0.0f; // Yaw (rotation around Y-axis)
@@ -305,8 +352,8 @@ int main(int argc, char *argv[]) {
   // --- Main Loop ---
   bool quit = false;
   SDL_Event e;
-
-  auto m = Matrix4x4();
+ 
+  auto m = Matrix4x4::indentity();
   // translation vector.
   m.m[12] = 2;
   m.m[13] = 2;
@@ -322,7 +369,7 @@ int main(int argc, char *argv[]) {
   // Projection Setup (Remains constant)
   Matrix4x4 projectionMatrix = createPerspectiveProjectionMatrix(
         35.0f, (float)WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 500.0f);
-
+  bool mode = true;
   while (!quit) {
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT) {
@@ -343,15 +390,18 @@ int main(int argc, char *argv[]) {
     // 1. Camera Logic: Calculate view basis vectors and View Matrix
     Vector3 origin, target;
     // origin = {250,-200,500};
-
-    origin = circular_orbit(300, angle, angle*130);
+    if(mode)
+      origin = circular_orbit(200, angle, angle*130);
+    else
+      origin = circular_orbit_transversal(400, angle);
     target = {0.0f, 0.0f, 0.0f};    // Focus point (at the origin of the world)
 
     // Build the View Matrix
-    //Matrix4x4 viewMatrix = createViewMatrix(origin, target);
+    // Matrix4x4 viewMatrix = createViewMatrix(origin, target);
     Vector3 world_up{0,1,0};
     Matrix4x4 viewMatrix = look_at_view_quat(origin, target ,world_up);
-
+    //Matrix4x4  viewMatrix = BuildViewMatrixFromEuler(0, -0.5,0, Vector3{0,400,700});
+    //Matrix4x4  viewMatrix = BuildViewMatrixFromEuler(3.14/13, -3.14/3.2,0, Vector3{-100,400,200});
     
     // 2. Drawing Steps
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black screen
@@ -364,6 +414,7 @@ int main(int argc, char *argv[]) {
     auto c = txt.substr(84, 41);
     auto d = txt.substr(126, 41);
 
+
     renderText(renderer, font, "View Matrix: (Column Major OpenGl style)", 50,
                26);
     renderText(renderer, font, "     R         U         F         T", 50, 38);
@@ -371,7 +422,15 @@ int main(int argc, char *argv[]) {
     renderText(renderer, font, b, 50, 62);
     renderText(renderer, font, c, 50, 74);
     renderText(renderer, font, d, 50, 86);
-    drawCubeEdges(renderer, cubeVertices, viewMatrix, projectionMatrix);
+    renderText(renderer, font, std::format("rotation: {0:5.1f} deg",(angle*360)/(M_PI*2)), 50, 98);
+    if(mode)
+      renderText(renderer, font, "animation mode :'spiral up'", 320, 500);
+    else
+      renderText(renderer, font, "animation mode :'target lock'", 320, 500);
+      
+
+    //drawCubeEdges(renderer, cubeVertices, viewMatrix, projectionMatrix); 
+    drawCubeEdges(renderer, my_geometry, viewMatrix, projectionMatrix);
 
     // Update the screen with rendering commands
     SDL_RenderPresent(renderer);
@@ -380,11 +439,12 @@ int main(int argc, char *argv[]) {
     SDL_Delay(16); // ~60 FPS
 
     // Small animation.
-    angle += (M_PI / 360.0f);
+    angle += (2*M_PI / 720.0f);
     count++;
-    if (count >= 720) {
+    if (count >= 360) {
       count = 0;
       angle = 0.0f;
+      mode = !mode;
     }
   }
 
