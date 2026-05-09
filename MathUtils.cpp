@@ -5,33 +5,7 @@
 
 // --- Function Implementations ---
 
-Vector3 subtract(const Vector3& a, const Vector3& b) {
-    return {a.x - b.x, a.y - b.y, a.z - b.z};
-}
 
-float normalize(Vector3& v) {
-    float length = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-    if (length > 1e-6f) { // Avoid division by zero or near-zero lengths
-        v.x /= length;
-        v.y /= length;
-        v.z /= length;
-    }
-    return length;
-}
-
-float dot_product(const Vector3& a, const Vector3& b) {
-    return 
-        a.x*b.x+a.y*b.y+a.z*b.z
-    ;
-}
-
-Vector3 cross_product(const Vector3& a, const Vector3& b) {
-    return {
-        a.y * b.z - a.z * b.y,
-        a.z * b.x - a.x * b.z,
-        a.x * b.y - a.y * b.x
-    };
-}
 
 Matrix4x4 multiply(const Matrix4x4& A, const Matrix4x4& B) {
     Matrix4x4 C;
@@ -118,84 +92,6 @@ Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspectRatio, f
     return P;
 }
 
-void camera_look_at(const Vector3& origin, const Vector3& target,
-                    Vector3& right, Vector3& up, Vector3& forward)
-{
-    // Forward (Z axis)
-    forward = subtract(target, origin);
-    normalize(forward);
-
-    // Choose a world-up that is NOT parallel to forward
-    Vector3 temp_world_up = {0.0f, 1.0f, 0.0f};
-
-    // If forward is too close to world-up, pick another up vector
-    if (fabs(dot_product(forward, temp_world_up)) > 0.999f) {
-        temp_world_up = {1.0f, 0.0f, 0.0f};
-    }
-
-    // Right (X axis)
-    right = cross_product(temp_world_up, forward);
-    normalize(right);
-
-    // Up (Y axis)
-    up = cross_product(forward, right);
-    normalize(up);
-}
-
-
-void camera_look_at_(const Vector3& origin, const Vector3& target, 
-                     Vector3& right, Vector3& up, Vector3& forward) {
-    
-    // Calculate Z-axis (Forward vector: from Origin to Target)
-    forward = subtract(target, origin);
-    normalize(forward);
-
-    // Determine the "up" world direction (assuming Y is up in our scene)
-    Vector3 temp_world_up = {0.0f, 1.0f, 0.0f}; 
-
-    // Calculate X-axis (Right vector): Cross product of World Up and Forward
-    right = cross_product(temp_world_up, forward);
-    normalize(right);
-
-    // Calculate Y-axis (Actual Up vector): Must be perpendicular to both Right and Forward
-    up = cross_product(forward, right);
-    normalize(up);
-}
-
-// not working yet
-void camera_look_at_quaternion(const Vector3& origin, const Vector3& target,
-                                Vector3& right, Vector3& up, Vector3& forward) {
-    
-    forward = normalize(subtract(target, origin));
-    
-    // Create a rotation from world Y-up to the desired forward direction
-    Vector3 world_up = {0.0f, 1.0f, 0.0f};
-    Vector3 rotation_axis = cross_product(world_up, forward);
-    
-    if (length(rotation_axis) < 0.0001f) {
-        // Parallel case: no rotation needed or 180-degree rotation
-        if (dot_product(world_up, forward) > 0) {
-            right = {1, 0, 0};
-            up = {0, 1, 0};
-        } else {
-            right = {1, 0, 0};
-            up = {0, -1, 0};
-        }
-    } else {
-        normalize(rotation_axis);
-        float angle = acos(dot_product(world_up, forward));
-        
-        // Axis-angle to rotation matrix conversion
-        float c = cos(angle);
-        float s = sin(angle);
-        float t = 1 - c;
-        float x = rotation_axis.x, y = rotation_axis.y, z = rotation_axis.z;
-        
-        right.x = t*x*x + c;    right.y = t*x*y + s*z;  right.z = t*x*z - s*y;
-        up.x = t*x*y - s*z;     up.y = t*y*y + c;       up.z = t*y*z + s*x;
-        // forward is already calculated
-    }
-}
 /**
  * @brief Multiplies a 3D vertex (treated as homogeneous coordinates) by a 4x4 matrix.
  * 
@@ -238,38 +134,117 @@ Vector3 transform_vertex(const Matrix4x4& M, const Vector3& v) {
     }
 }
 
-Matrix4x4 createViewMatrix(const Vector3& origin, const Vector3& target) {
-    Vector3 right, up, forward;
-    camera_look_at(origin, target, right, up, forward);
 
-    Matrix4x4 view = Matrix4x4();
+Matrix4x4 look_at_view(const Vector3& eye,
+                     const Vector3& target,
+                     const Vector3& world_up)
+{
+    // Forward (camera looks toward -Z in view space)
+    Vector3 f = subtract(target, eye);
+    normalize(f);
 
-/*
-// Zero out
-for (int i = 0; i < 16; ++i)
-view.m[i] = 0.0f;
-*/
+    // Choose a stable up
+    Vector3 up = world_up;
+    if (fabs(dot_product(f, up)) > 0.999f)
+        up = {1,0,0};
 
-    // Orientation (column-major)
-    view.m[0]  = right.x;
-    view.m[1]  = right.y;
-    view.m[2]  = right.z;
+    // Right = up × forward
+    Vector3 r = cross_product(up, f);
+    normalize(r);
 
-    view.m[4]  = up.x;
-    view.m[5]  = up.y;
-    view.m[6]  = up.z;
+    // Recompute true up = forward × right
+    up = cross_product(f, r);
 
-    view.m[8]  = forward.x;
-    view.m[9]  = forward.y;
-    view.m[10] = forward.z;
+    // Column-major view matrix
+    Matrix4x4 M;
 
-    // Translation (last column)
-    view.m[12] = - (right.x   * origin.x + right.y   * origin.y + right.z   * origin.z);
-    view.m[13] = - (up.x      * origin.x + up.y      * origin.y + up.z      * origin.z);
-    view.m[14] = - (forward.x * origin.x + forward.y * origin.y + forward.z * origin.z);
+    M.m[0]  = r.x;   M.m[4]  = r.y;   M.m[8]  = r.z;   M.m[12] = -dot_product(r, eye);
+    M.m[1]  = up.x;  M.m[5]  = up.y;  M.m[9]  = up.z;  M.m[13] = -dot_product(up, eye);
+    M.m[2]  = f.x;   M.m[6]  = f.y;   M.m[10] = f.z;   M.m[14] = -dot_product(f, eye);
+    M.m[3]  = 0;     M.m[7]  = 0;     M.m[11] = 0;     M.m[15] = 1;
 
-    // Homogeneous bottom-right
-    view.m[15] = 1.0f;
+    return M;
+}
 
-    return view;
+Matrix4x4 look_at_view_quat(const Vector3& eye,
+                     const Vector3& target, Vector3& world_up)
+{
+    // 1. Compute forward
+    Vector3 f = subtract(target, eye);
+    normalize(f);
+
+    // 2. Stable world-up
+    if (fabs(dot_product(f, world_up)) > 0.999f)
+        world_up  = {1, 0, 0};
+
+    // 3. Build orthonormal basis
+    Vector3 r = cross_product(world_up, f);
+    normalize(r);
+
+    Vector3 u = cross_product(f, r);
+    normalize(u);
+
+    // 4. Convert basis → quaternion (internal only)
+    float m00 = r.x, m01 = u.x, m02 = f.x;
+    float m10 = r.y, m11 = u.y, m12 = f.y;
+    float m20 = r.z, m21 = u.z, m22 = f.z;
+
+    float trace = m00 + m11 + m22;
+    float qw, qx, qy, qz;
+
+    if (trace > 0.0f) {
+        float s = sqrtf(trace + 1.0f) * 2.0f;
+        qw = 0.25f * s;
+        qx = (m21 - m12) / s;
+        qy = (m02 - m20) / s;
+        qz = (m10 - m01) / s;
+    } else if (m00 > m11 && m00 > m22) {
+        float s = sqrtf(1.0f + m00 - m11 - m22) * 2.0f;
+        qw = (m21 - m12) / s;
+        qx = 0.25f * s;
+        qy = (m01 + m10) / s;
+        qz = (m02 + m20) / s;
+    } else if (m11 > m22) {
+        float s = sqrtf(1.0f + m11 - m00 - m22) * 2.0f;
+        qw = (m02 - m20) / s;
+        qx = (m01 + m10) / s;
+        qy = 0.25f * s;
+        qz = (m12 + m21) / s;
+    } else {
+        float s = sqrtf(1.0f + m22 - m00 - m11) * 2.0f;
+        qw = (m10 - m01) / s;
+        qx = (m02 + m20) / s;
+        qy = (m12 + m21) / s;
+        qz = 0.25f * s;
+    }
+
+    // 5. Extract basis from quaternion (stabilizes roll)
+    auto rotate = [&](const Vector3& v) {
+        // q * v * q^-1
+        Vector3 t = {
+            2.0f * (qy * v.z - qz * v.y),
+            2.0f * (qz * v.x - qx * v.z),
+            2.0f * (qx * v.y - qy * v.x)
+        };
+
+        return Vector3{
+            v.x + qw * t.x + (qy * t.z - qz * t.y),
+            v.y + qw * t.y + (qz * t.x - qx * t.z),
+            v.z + qw * t.z + (qx * t.y - qy * t.x)
+        };
+    };
+
+    r = rotate({1,0,0});
+    u = rotate({0,1,0});
+    f = rotate({0,0,1});
+
+    // 6. Build column-major view matrix
+    Matrix4x4 M;
+
+    M.m[0]  = r.x;   M.m[4]  = r.y;   M.m[8]  = r.z;   M.m[12] = -dot_product(r, eye);
+    M.m[1]  = u.x;   M.m[5]  = u.y;   M.m[9]  = u.z;   M.m[13] = -dot_product(u, eye);
+    M.m[2]  = f.x;   M.m[6]  = f.y;   M.m[10] = f.z;   M.m[14] = -dot_product(f, eye);
+    M.m[3]  = 0;     M.m[7]  = 0;     M.m[11] = 0;     M.m[15] = 1;
+
+    return M;
 }

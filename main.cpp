@@ -233,6 +233,15 @@ void drawCubeEdges(SDL_Renderer *renderer, const std::vector<Point3D> &vertices,
   }
 }
 
+Vector3 circular_orbit(float radius, float angle_radians, float height)
+{
+    Vector3 pos;
+    pos.x = radius * cos(angle_radians);
+    pos.z = radius * sin(angle_radians);
+    pos.y = height;
+    return pos;
+}
+
 int main(int argc, char *argv[]) {
   // --- SDL Initialization ---
   TTF_Init();
@@ -273,24 +282,22 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  float tip =100;
   // --- Cube Setup (Centered, Stationary) ---
   std::vector<Point3D> cubeVertices = {
       {-CUBE_SIZE / 2, -CUBE_SIZE / 2, CUBE_SIZE / 2},  // 0: Back bottom left
       {CUBE_SIZE / 2, -CUBE_SIZE / 2, CUBE_SIZE / 2},   // 1: Back bottom right
-      {CUBE_SIZE / 2, CUBE_SIZE / 2, CUBE_SIZE / 2},    // 2: Back top right
-      {-CUBE_SIZE / 2, CUBE_SIZE / 2, CUBE_SIZE / 2},   // 3: Back top left
+      {CUBE_SIZE / tip, CUBE_SIZE / tip, CUBE_SIZE / tip},    // 2: Back top right
+      {-CUBE_SIZE / tip, CUBE_SIZE / tip, CUBE_SIZE / tip},   // 3: Back top left
       {-CUBE_SIZE / 2, -CUBE_SIZE / 2, -CUBE_SIZE / 2}, // 4: Front bottom left
       {CUBE_SIZE / 2, -CUBE_SIZE / 2, -CUBE_SIZE / 2},  // 5: Front bottom right
-      {CUBE_SIZE / 2, CUBE_SIZE / 2, -CUBE_SIZE / 2},   // 6: Front top right
-      {-CUBE_SIZE / 2, CUBE_SIZE / 2, -CUBE_SIZE / 2}   // 7: Front top left
+      {CUBE_SIZE / tip, CUBE_SIZE / tip, -CUBE_SIZE / tip},   // 6: Front top right
+      {-CUBE_SIZE / tip, CUBE_SIZE / tip, -CUBE_SIZE / tip}   // 7: Front top left
   };
 
   // --- Camera Control Variables ---
-  float cameraAngleY = 0.0f; // Yaw (rotation around Y-axis)
-  // float cameraAngleX = -M_PI / 4.0f; // Pitch (looking slightly down
-  // initially)
-  float cameraAngleX = 0.f; // Pitch
-  const float CAMERA_DISTANCE = 700.0f;
+  float angle = 0.0f; // Yaw (rotation around Y-axis)
+
 
   // incremental counter.
   size_t count = 0;
@@ -324,10 +331,7 @@ int main(int argc, char *argv[]) {
       // Allow camera movement on mouse drag
       if (e.type == SDL_MOUSEMOTION && e.button.button == SDL_BUTTON_LEFT) {
         // Simple increment for demonstration, ideally needs state tracking
-        cameraAngleY += 0.001f;
-        cameraAngleX = std::max(
-            -static_cast<float>(M_PI) / 2.0f,
-            std::min(static_cast<float>(M_PI) / 2.0f, cameraAngleX + 0.001f));
+        angle += 0.001f;
       }
       // Allow manual reset or exit on key press
       if (e.type == SDL_KEYDOWN &&
@@ -338,27 +342,21 @@ int main(int argc, char *argv[]) {
 
     // 1. Camera Logic: Calculate view basis vectors and View Matrix
     Vector3 origin, target;
-    float cameraYOffset = -50.0f; // Keep camera viewing height constant
+    // origin = {250,-200,500};
 
-    // Use spherical coordinates for smooth rotation around the center point (0,
-    // 0, 0)
-    float x_cam =
-        CAMERA_DISTANCE * std::cos(cameraAngleY) * std::cos(cameraAngleX);
-    float y_cam = cameraYOffset +
-                  CAMERA_DISTANCE *
-                      std::sin(cameraAngleX); // Y component adjusted by offset
-    float z_cam =
-        CAMERA_DISTANCE * std::sin(cameraAngleY) * std::cos(cameraAngleX);
-
-    origin = {x_cam, y_cam, z_cam}; // Camera Position
+    origin = circular_orbit(300, angle, angle*130);
     target = {0.0f, 0.0f, 0.0f};    // Focus point (at the origin of the world)
 
     // Build the View Matrix
-    Matrix4x4 viewMatrix = createViewMatrix(origin, target);
+    //Matrix4x4 viewMatrix = createViewMatrix(origin, target);
+    Vector3 world_up{0,1,0};
+    Matrix4x4 viewMatrix = look_at_view_quat(origin, target ,world_up);
+
     
     // 2. Drawing Steps
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black screen
     SDL_RenderClear(renderer);
+
     // Parse view matrix on screen
     auto txt = viewMatrix.to_string_column_major();
     auto a = txt.substr(0, 41);
@@ -382,11 +380,11 @@ int main(int argc, char *argv[]) {
     SDL_Delay(16); // ~60 FPS
 
     // Small animation.
-    cameraAngleY += (M_PI / 360.0f);
+    angle += (M_PI / 360.0f);
     count++;
     if (count >= 720) {
       count = 0;
-      cameraAngleY = 0.0f;
+      angle = 0.0f;
     }
   }
 

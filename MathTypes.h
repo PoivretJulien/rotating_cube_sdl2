@@ -50,7 +50,6 @@ struct Matrix4x4 {
     0,0,0,0,
   }{}
 
-
   /**
    * @brief Converts the 4x4 matrix into a readable string representation.
    *
@@ -69,6 +68,7 @@ struct Matrix4x4 {
                        m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8],
                        m[9], m[10], m[11], m[12], m[13], m[14], m[15]);
   }
+
   inline std::string to_string_column_major() {
     return std::format("|{0:^9.3f},{1:^9.3f},{2:^9.3f},{3:^9.3f}|\n"
                        "|{4:^9.3f},{5:^9.3f},{6:^9.3f},{7:^9.3f}|\n"
@@ -81,23 +81,6 @@ struct Matrix4x4 {
 
 // --- Linear Algebra Function Declarations ---
 
-/**
- * @brief Helper function for vector subtraction (A - B).
- */
-Vector3 subtract(const Vector3 &a, const Vector3 &b);
-
-/**
- * @brief Helper function for normalization (calculating unit vector) and
- * returns original length.
- */
-float normalize(Vector3 &v);
-
-/**
- * @brief Calculates the cross product of two vectors (A x B).
- */
-Vector3 cross_product(const Vector3 &a, const Vector3 &b);
-
-float dot_product(const Vector3& a, const Vector3& b);
 /**
  * @brief Multiplies two matrices: Result = A * B (A is on the left).
  */
@@ -114,19 +97,42 @@ Matrix4x4 multiply_unrolled(const Matrix4x4 &A, const Matrix4x4 &B);
 Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspectRatio,
                                             float nearZ, float farZ);
 
-/**
- * @brief Calculates the orthonormal basis vectors [right, up, forward]. (Camera
- * LookAt implementation)
- */
-void camera_look_at(const Vector3 &origin, const Vector3 &target,
-                    Vector3 &right, Vector3 &up, Vector3 &forward);
-
-/**
- * @brief Builds a View Matrix that transforms coordinates from World Space to
- * Camera View Space.
- */
-Matrix4x4 createViewMatrix(const Vector3 &origin, const Vector3 &target);
-
 Vector3 transform_vertex(const Matrix4x4 &M, const Vector3 &v);
 
+Matrix4x4 look_at_view(const Vector3& eye,
+                     const Vector3& target,
+                     const Vector3& world_up = {0,1,0});
+
+Matrix4x4 look_at_view_quat(const Vector3& eye,
+                     const Vector3& target, Vector3& world_up);
+
+inline Vector3 subtract(const Vector3& a, const Vector3& b) {
+    return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
+
+inline float normalize(Vector3& v) {
+    float length = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    if (length > 1e-6f) { // Avoid division by zero or near-zero lengths
+        v.x /= length;
+        v.y /= length;
+        v.z /= length;
+    }
+    return length;
+}
+
+inline float dot_product(const Vector3& a, const Vector3& b) {
+    return 
+        a.x*b.x+a.y*b.y+a.z*b.z
+    ;
+}
+
+
+
+inline Vector3 cross_product(const Vector3& a, const Vector3& b) {
+    return {
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
+    };
+}
 #endif // MATH_TYPES_H
