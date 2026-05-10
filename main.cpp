@@ -399,7 +399,7 @@ std::vector<Point3D> cubeVertices = {
     // Build the View Matrix
     // Matrix4x4 viewMatrix = createViewMatrix(origin, target);
     Vector3 world_up{0,1,0};
-    Matrix4x4 viewMatrix = look_at_view_quat(origin, target ,world_up);
+    Matrix4x4 viewMatrix = look_at_view(origin, target ,world_up);
     //Matrix4x4  viewMatrix = BuildViewMatrixFromEuler(0, -0.5,0, Vector3{0,400,700});
     //Matrix4x4  viewMatrix = BuildViewMatrixFromEuler(3.14/13, -3.14/3.2,0, Vector3{-100,400,200});
     
