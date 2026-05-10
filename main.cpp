@@ -27,20 +27,18 @@ struct Point3D {
   float x, y, z;
   /**
       (swap z and y)
-  */ 
-  constexpr inline Point3D to_opengl(){
-    return {x,z,y};
-  } 
-  inline void scale(float factor){
-    x*=factor;
-    y*=factor;
-    z*=factor;
+  */
+  constexpr inline Point3D to_opengl() { return {x, z, y}; }
+  inline void scale(float factor) {
+    x *= factor;
+    y *= factor;
+    z *= factor;
   }
 
-  Point3D& operator * (float const& factor){
-    x*=factor; 
-    y*=factor; 
-    z*=factor; 
+  Point3D &operator*(float const &factor) {
+    x *= factor;
+    y *= factor;
+    z *= factor;
     return *this;
   }
 };
@@ -104,84 +102,86 @@ void renderText(SDL_Renderer *renderer, TTF_Font *font, const std::string &text,
 const float AA_RADIUS = 1.3f;
 
 /**
- * @brief Draws an anti-aliased line segment using distance weighting and exponential falloff.
- * 
- * This function iterates over every pixel within the bounding box of the specified line 
- * segment (expanded by AA_RADIUS). For each pixel, it calculates the perpendicular 
- * distance to the true mathematical path of the line. Pixels closer to the line 
- * receive a higher opacity value (alpha), creating a smooth anti-aliased edge.
- * 
- * The alpha weighting uses an exponential decay model (e^(-3*d^2/R^2)) for a natural, 
- * gradual fade effect near the line center.
- * 
- * @param renderer Pointer to the SDL rendering context used for drawing primitives.
+ * @brief Draws an anti-aliased line segment using distance weighting and
+ * exponential falloff.
+ *
+ * This function iterates over every pixel within the bounding box of the
+ * specified line segment (expanded by AA_RADIUS). For each pixel, it calculates
+ * the perpendicular distance to the true mathematical path of the line. Pixels
+ * closer to the line receive a higher opacity value (alpha), creating a smooth
+ * anti-aliased edge.
+ *
+ * The alpha weighting uses an exponential decay model (e^(-3*d^2/R^2)) for a
+ * natural, gradual fade effect near the line center.
+ *
+ * @param renderer Pointer to the SDL rendering context used for drawing
+ * primitives.
  * @param x1 Starting X coordinate of the line segment.
  * @param y1 Starting Y coordinate of the line segment.
  * @param x2 Ending X coordinate of the line segment.
  * @param y2 Ending Y coordinate of the line segment.
  * @param color The base RGB and alpha (0-255) color for the line.
- * 
+ *
  * @pre Requires SDL_BLENDMODE_BLEND to be set on the renderer before calling.
- * 
- * @note For lines with zero or near-zero length, a single point is drawn instead.
- * @note Performance complexity: O(W*H), where W and H are dimensions of the bounding box + 2*AA_RADIUS.
+ *
+ * @note For lines with zero or near-zero length, a single point is drawn
+ * instead.
+ * @note Performance complexity: O(W*H), where W and H are dimensions of the
+ * bounding box + 2*AA_RADIUS.
  */
-void SDL_RenderAALine(SDL_Renderer* renderer,
-                      int x1, int y1, int x2, int y2,
-                      const SDL_Color& color)
-{
-    float dx = float(x2 - x1);
-    float dy = float(y2 - y1);
-    float len2 = dx*dx + dy*dy;
+void SDL_RenderAALine(SDL_Renderer *renderer, int x1, int y1, int x2, int y2,
+                      const SDL_Color &color) {
+  float dx = float(x2 - x1);
+  float dy = float(y2 - y1);
+  float len2 = dx * dx + dy * dy;
 
-    // Degenerate line → draw a point
-    if (len2 < 1.0f) {
-        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 255);
-        SDL_RenderDrawPoint(renderer, x1, y1);
-        return;
+  // Degenerate line → draw a point
+  if (len2 < 1.0f) {
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 255);
+    SDL_RenderDrawPoint(renderer, x1, y1);
+    return;
+  }
+
+  float invLen = 1.0f / std::sqrt(len2);
+
+  // Expand bounding box by AA radius
+  int minX = std::min(x1, x2) - int(AA_RADIUS);
+  int maxX = std::max(x1, x2) + int(AA_RADIUS);
+  int minY = std::min(y1, y2) - int(AA_RADIUS);
+  int maxY = std::max(y1, y2) + int(AA_RADIUS);
+
+  // Pre-set RGB once (alpha changes per pixel)
+  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+  for (int y = minY; y <= maxY; ++y) {
+    for (int x = minX; x <= maxX; ++x) {
+
+      float px = x + 0.5f;
+      float py = y + 0.5f;
+
+      // Project pixel onto the segment using t = dot / |D|²
+      float t = ((px - x1) * dx + (py - y1) * dy) / len2;
+      t = std::clamp(t, 0.0f, 1.0f);
+
+      // Closest point on the segment
+      float cx = x1 + dx * t;
+      float cy = y1 + dy * t;
+
+      // Perpendicular distance (no pow, no sqrt)
+      float dist = std::hypot(px - cx, py - cy);
+
+      if (dist < AA_RADIUS) {
+        // float alpha = 1.0f - (dist / AA_RADIUS);
+        float alpha = std::exp(-3.0f * (dist * dist) / (AA_RADIUS * AA_RADIUS));
+
+        uint8_t a = uint8_t(alpha * color.a);
+
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, a);
+        SDL_RenderDrawPoint(renderer, x, y);
+      }
     }
-
-    float invLen = 1.0f / std::sqrt(len2);
-
-    // Expand bounding box by AA radius
-    int minX = std::min(x1, x2) - int(AA_RADIUS);
-    int maxX = std::max(x1, x2) + int(AA_RADIUS);
-    int minY = std::min(y1, y2) - int(AA_RADIUS);
-    int maxY = std::max(y1, y2) + int(AA_RADIUS);
-
-    // Pre-set RGB once (alpha changes per pixel)
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-    for (int y = minY; y <= maxY; ++y) {
-        for (int x = minX; x <= maxX; ++x) {
-
-            float px = x + 0.5f;
-            float py = y + 0.5f;
-
-            // Project pixel onto the segment using t = dot / |D|²
-            float t = ((px - x1) * dx + (py - y1) * dy) / len2;
-            t = std::clamp(t, 0.0f, 1.0f);
-
-            // Closest point on the segment
-            float cx = x1 + dx * t;
-            float cy = y1 + dy * t;
-
-            // Perpendicular distance (no pow, no sqrt)
-            float dist = std::hypot(px - cx, py - cy);
-
-            if (dist < AA_RADIUS) {
-                //float alpha = 1.0f - (dist / AA_RADIUS);
-                float alpha = std::exp(-3.0f * (dist*dist) / (AA_RADIUS*AA_RADIUS));
-
-                uint8_t a = uint8_t(alpha * color.a);
-
-                SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, a);
-                SDL_RenderDrawPoint(renderer, x, y);
-            }
-        }
-    }
+  }
 }
-
 
 void drawCubeEdges(SDL_Renderer *renderer, const std::vector<Point3D> &vertices,
                    const Matrix4x4 &viewMatrix,
@@ -253,24 +253,6 @@ void drawCubeEdges(SDL_Renderer *renderer, const std::vector<Point3D> &vertices,
   }
 }
 
-Vector3 circular_orbit(float radius, float angle_radians, float height)
-{
-    Vector3 pos;
-     pos.x = radius * cos(angle_radians);
-     pos.z = radius * sin(angle_radians);
-     pos.y = height;
-    return pos;
-}
-
-Vector3 circular_orbit_transversal(float radius, float angle_radians)
-{
-     Vector3 pos;
-     pos.z = radius * cos(angle_radians);
-     pos.y = radius * sin(angle_radians);
-     pos.x = 100;   
-    return pos;
-}
-
 int main(int argc, char *argv[]) {
   // --- SDL Initialization ---
   TTF_Init();
@@ -311,40 +293,18 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
- // ( world system z up )
-    std::vector<Point3D> my_geometry{
-    {1,-1,0},
-    {1,1,0},
-    {-1,1,0},
-    {-1,-1,0},
-    {.01,-.01,2.5},
-    {.01,.01,2.5},
-    {-.01,.01,2.5},
-    {-.01,-.01,2.5},
+  // ( world system z up )
+  std::vector<Point3D> my_geometry{
+      {1, -1, 0},       {1, 1, 0},       {-1, 1, 0},       {-1, -1, 0},
+      {.01, -.01, 2.5}, {.01, .01, 2.5}, {-.01, .01, 2.5}, {-.01, -.01, 2.5},
   };
 
-  for(auto& vertex:my_geometry){
-    vertex = vertex.to_opengl()*(CUBE_SIZE*0.25);
+  for (auto &vertex : my_geometry) {
+    vertex = vertex.to_opengl() * (CUBE_SIZE * 0.25);
   }
-
-/*
-float tip =100;
-// --- Cube Setup (Centered, Stationary) ---
-std::vector<Point3D> cubeVertices = {
-  {-CUBE_SIZE / 2, -CUBE_SIZE / 2, CUBE_SIZE / 2},  // 0: Back bottom left
-  {CUBE_SIZE / 2, -CUBE_SIZE / 2, CUBE_SIZE / 2},   // 1: Back bottom right
-  {CUBE_SIZE / tip, CUBE_SIZE / tip, CUBE_SIZE / tip},    // 2: Back top right
-  {-CUBE_SIZE / tip, CUBE_SIZE / tip, CUBE_SIZE / tip},   // 3: Back top left
-  {-CUBE_SIZE / 2, -CUBE_SIZE / 2, -CUBE_SIZE / 2}, // 4: Front bottom left
-  {CUBE_SIZE / 2, -CUBE_SIZE / 2, -CUBE_SIZE / 2},  // 5: Front bottom right
-  {CUBE_SIZE / tip, CUBE_SIZE / tip, -CUBE_SIZE / tip},   // 6: Front top right
-  {-CUBE_SIZE / tip, CUBE_SIZE / tip, -CUBE_SIZE / tip}   // 7: Front top left
-};
-*/
 
   // --- Camera Control Variables ---
   float angle = 0.0f; // Yaw (rotation around Y-axis)
-
 
   // incremental counter.
   size_t count = 0;
@@ -352,7 +312,7 @@ std::vector<Point3D> cubeVertices = {
   // --- Main Loop ---
   bool quit = false;
   SDL_Event e;
- 
+
   auto m = Matrix4x4::indentity();
   // translation vector.
   m.m[12] = 2;
@@ -368,8 +328,15 @@ std::vector<Point3D> cubeVertices = {
 
   // Projection Setup (Remains constant)
   Matrix4x4 projectionMatrix = createPerspectiveProjectionMatrix(
-        35.0f, (float)WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 500.0f);
-  bool mode = true;
+      35.0f, (float)WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 500.0f);
+  int mode = 0;
+
+  Vector3 origin, target;
+  target = {0, 0, 0};
+  Vector3 world_up{0, 1, 0};
+  float limit = 360;
+
+  Camera cam;
   while (!quit) {
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT) {
@@ -387,25 +354,44 @@ std::vector<Point3D> cubeVertices = {
       }
     }
 
-    // 1. Camera Logic: Calculate view basis vectors and View Matrix
-    Vector3 origin, target;
-    // origin = {250,-200,500};
-    if(mode)
-      origin = circular_orbit(200, angle, angle*130);
-    else
-      origin = circular_orbit_transversal(400, angle);
-    target = {0.0f, 0.0f, 0.0f};    // Focus point (at the origin of the world)
-
-    // Build the View Matrix
-    // Matrix4x4 viewMatrix = createViewMatrix(origin, target);
-    Vector3 world_up{0,1,0};
-    Matrix4x4 viewMatrix = look_at_view(origin, target ,world_up);
-    //Matrix4x4  viewMatrix = BuildViewMatrixFromEuler(0, -0.5,0, Vector3{0,400,700});
-    //Matrix4x4  viewMatrix = BuildViewMatrixFromEuler(3.14/13, -3.14/3.2,0, Vector3{-100,400,200});
-    
     // 2. Drawing Steps
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black screen
     SDL_RenderClear(renderer);
+    // 3. view matrix variant
+    Matrix4x4 viewMatrix;
+    switch (mode) {
+    case 0:
+      origin = circular_orbit(200, angle, angle * 130);
+      viewMatrix = look_at_view(origin, target, world_up);
+      renderText(renderer, font, "animation mode :'spiral up'", 320, 500);
+      break;
+    case 1:
+      origin = circular_orbit_transversal(400, angle);
+      viewMatrix = look_at_view(origin, target, world_up);
+      renderText(renderer, font, "animation mode :'target lock'", 320, 500);
+      break;
+    case 2:
+      target.y=2.5*((CUBE_SIZE)*0.25); // pivot pyramid tip 
+      camera_init_orbit(cam, target, 350);
+      camera_orbit(cam, target, angle, 0);
+      renderText(renderer, font,
+                 "animation mode :'orbit arc ball (from pivot)'",
+                 240, 500);
+      viewMatrix = camera_view_matrix(cam);
+      break;
+    case 3:
+      target.y=0;
+      camera_init_orbit(cam, target, 500);
+      camera_orbit(cam, target, 0, angle);
+      limit = 720;
+      viewMatrix = camera_view_matrix(cam);
+      renderText(renderer, font,
+                 "animation mode :'orbit arc ball (from pivot)'", 240,
+                 500);
+      break;
+    default:
+      break;
+    }
 
     // Parse view matrix on screen
     auto txt = viewMatrix.to_string_column_major();
@@ -414,22 +400,20 @@ std::vector<Point3D> cubeVertices = {
     auto c = txt.substr(84, 41);
     auto d = txt.substr(126, 41);
 
-
-    renderText(renderer, font, "View Matrix: (Column Major OpenGl style)", 50,
+    renderText(renderer, font, "View Matrix: (Column Major OpenGl Style)", 50,
                26);
     renderText(renderer, font, "     R         U         F         T", 50, 38);
     renderText(renderer, font, a, 50, 50);
     renderText(renderer, font, b, 50, 62);
     renderText(renderer, font, c, 50, 74);
     renderText(renderer, font, d, 50, 86);
-    renderText(renderer, font, std::format("rotation: {0:5.1f} deg",(angle*360)/(M_PI*2)), 50, 98);
-    if(mode)
-      renderText(renderer, font, "animation mode :'spiral up'", 320, 500);
-    else
-      renderText(renderer, font, "animation mode :'target lock'", 320, 500);
-      
+    renderText(
+        renderer, font,
+        std::format("rotation: {0:5.1f} deg", (angle * 360) / (M_PI * 2)), 50,
+        98);
 
-    //drawCubeEdges(renderer, cubeVertices, viewMatrix, projectionMatrix); 
+    // combine view matrix and projection matrix 
+    // then cpu compute the transformation for each vertices.
     drawCubeEdges(renderer, my_geometry, viewMatrix, projectionMatrix);
 
     // Update the screen with rendering commands
@@ -439,12 +423,18 @@ std::vector<Point3D> cubeVertices = {
     SDL_Delay(16); // ~60 FPS
 
     // Small animation.
-    angle += (2*M_PI / 720.0f);
+    angle += (2 * M_PI / 720.0f);
+
     count++;
-    if (count >= 360) {
+    if (count >= limit) {
       count = 0;
       angle = 0.0f;
-      mode = !mode;
+      mode++;
+      if (mode == 4) {
+        limit = 360;
+        mode = 0;
+        SDL_RenderClear(renderer);
+      }
     }
   }
 

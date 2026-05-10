@@ -5,8 +5,6 @@
 
 // --- Function Implementations ---
 
-
-
 Matrix4x4 multiply(const Matrix4x4& A, const Matrix4x4& B) {
     Matrix4x4 C;
 
@@ -199,6 +197,7 @@ Vector3 transform_vertex(const Matrix4x4& M, const Vector3& v) {
     }
 }
 
+
 Matrix4x4 look_at_view(const Vector3& eye,
                      const Vector3& target,
                      const Vector3& world_up)
@@ -312,4 +311,20 @@ Matrix4x4 look_at_view_quat(const Vector3& eye,
     M.m[3]  = 0;     M.m[7]  = 0;     M.m[11] = 0;     M.m[15] = 1;
 
     return M;
+}
+
+Vector3 circular_orbit(float radius, float angle_radians, float height) {
+  Vector3 pos;
+  pos.x = radius * cos(angle_radians);
+  pos.z = radius * sin(angle_radians);
+  pos.y = height;
+  return pos;
+}
+
+Vector3 circular_orbit_transversal(float radius, float angle_radians) {
+  Vector3 pos;
+  pos.z = radius * cos(angle_radians);
+  pos.y = radius * sin(angle_radians);
+  pos.x = 100;
+  return pos;
 }
