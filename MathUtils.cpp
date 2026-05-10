@@ -199,7 +199,6 @@ Vector3 transform_vertex(const Matrix4x4& M, const Vector3& v) {
     }
 }
 
-
 Matrix4x4 look_at_view(const Vector3& eye,
                      const Vector3& target,
                      const Vector3& world_up)
@@ -211,8 +210,8 @@ Matrix4x4 look_at_view(const Vector3& eye,
     // Choose a stable up
     Vector3 up = world_up;
 
-    if (fabs(dot_product(f, up)) > 0.999f)
-        up = {1,0,0};
+    if (fabs(dot_product(f, up)) > 0.99999f)
+        up = {1,0,1};
 
     // Right = up × forward
     Vector3 r = cross_product(up, f);
