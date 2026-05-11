@@ -1,428 +1,333 @@
 #include "MathTypes.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
-#include <algorithm> // For std::max, std::min
+#include <algorithm>
 #include <cmath>
-
 #include <cstddef>
+#include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <print>
 #include <string>
 #include <vector>
 
 // Constants for the cube definition and window size
-const int WINDOW_WIDTH = 800;
+const int WINDOW_WIDTH  = 800;
 const int WINDOW_HEIGHT = 600;
-const float CUBE_SIZE = 100.0f;
+const float CUBE_SIZE   = 100.0f;
+const float AA_RADIUS_SQ = 1.69f;  // 1.3^2 — precomputed to avoid sqrt/pow
 
-/**
- * @brief Helper structure to hold a screen point.
- */
-struct SDLPoint {
-  int x, y;
-};
+// ---------------------------------------------------------------------------
+// Helper
+// ---------------------------------------------------------------------------
+struct SDLPoint { int x, y; };
 
-// Structure to hold a 3D point in world space
+// ---------------------------------------------------------------------------
+// Point3D
+// ---------------------------------------------------------------------------
 struct Point3D {
   float x, y, z;
-  /**
-      (swap z and y)
-  */
-  constexpr inline Point3D to_opengl() { return {x, z, y}; }
-  inline void scale(float factor) {
-    x *= factor;
-    y *= factor;
-    z *= factor;
-  }
-
-  Point3D &operator*(float const &factor) {
-    x *= factor;
-    y *= factor;
-    z *= factor;
-    return *this;
+  inline Point3D to_opengl() { return {x, z, y}; }
+  inline void scale(float factor) { x *= factor; y *= factor; z *= factor; }
+  Point3D operator*(float const factor) {
+    return {x * factor, y * factor, z * factor};
   }
 };
 
-// --- Coordinate Conversion Helper ---
-/**
- * @brief Converts a 3D vector to an SDL Screen Point using standard perspective
- * projection (assumes Z=0 is the plane closest to the camera for screen
- * coordinates).
- */
-SDLPoint convert(const Vector3 &v) {
-  // Simple orthographic mapping scaled to window dimensions, assuming Z
-  // determines depth/scale. Since we are calculating final_x and final_y from
-  // the projection matrix already, this function should just map those
-  // normalized values [-1, 1] to pixel space [0, W/H].
-
-  float x = (v.x + 1.0f) * 0.5f * WINDOW_WIDTH;
-  float y = (v.y + 1.0f) * 0.5f * WINDOW_HEIGHT;
-
-  return {(int)x, (int)y};
+// ---------------------------------------------------------------------------
+// Coordinate conversion  ([-1,1] → [0, W/H])
+// ---------------------------------------------------------------------------
+inline SDLPoint convert(const Vector3 &v) {
+  return { (int)((v.x + 1.0f) * 0.5f * WINDOW_WIDTH),
+           (int)((v.y + 1.0f) * 0.5f * WINDOW_HEIGHT) };
 }
 
-// ------------------- RENDERING FUNCTION ----------------------
-/**
- * @brief Renders text using a pre-loaded font pointer. (Optimized)
- */
-void renderText(SDL_Renderer *renderer, TTF_Font *font, const std::string &text,
-                int x, int y) {
-  // Check if the font pointer is valid
-  if (!font)
-    return;
-
-  SDL_Color color = {255, 255, 255, 255}; // white
-
-  // Render text to a surface
-  SDL_Surface *surface = TTF_RenderText_Blended(font, text.c_str(), color);
-  if (!surface)
-    return; // Handle rendering failure
-
-  SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
-  if (!texture) {
-    SDL_FreeSurface(surface);
-    return;
+// ---------------------------------------------------------------------------
+// Text rendering helpers
+// ---------------------------------------------------------------------------
+static void renderText(SDL_Renderer *renderer, TTF_Font *font,
+                       const char *text, int x, int y) {
+  if (!font || !text) return;
+  SDL_Color white = {255, 255, 255, 255};
+  SDL_Surface *surf = TTF_RenderText_Blended(font, text, white);
+  if (!surf) return;
+  SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
+  if (tex) {
+    SDL_Rect dst = {x, y, surf->w, surf->h};
+    SDL_RenderCopy(renderer, tex, nullptr, &dst);
+    SDL_DestroyTexture(tex);
   }
-
-  SDL_Rect dst;
-  dst.x = x;
-  dst.y = y;
-  dst.w = surface->w;
-  dst.h = surface->h;
-
-  // Cleanup temporary resources immediately
-  SDL_FreeSurface(surface);
-  SDL_RenderCopy(renderer, texture, nullptr, &dst);
-  SDL_DestroyTexture(texture);
+  SDL_FreeSurface(surf);
 }
 
-// Defines how far from the line a pixel center can be to still contribute to
-// AA. This determines the thickness of the anti-aliased edge. 1.0 is a good
-// starting point.
-const float AA_RADIUS = 1.3f;
+// Overload for std::string (keeps existing API)
+static void renderText(SDL_Renderer *renderer, TTF_Font *font,
+                       const std::string &text, int x, int y) {
+  renderText(renderer, font, text.c_str(), x, y);
+}
 
-/**
- * @brief Draws an anti-aliased line segment using distance weighting and
- * exponential falloff.
- *
- * This function iterates over every pixel within the bounding box of the
- * specified line segment (expanded by AA_RADIUS). For each pixel, it calculates
- * the perpendicular distance to the true mathematical path of the line. Pixels
- * closer to the line receive a higher opacity value (alpha), creating a smooth
- * anti-aliased edge.
- *
- * The alpha weighting uses an exponential decay model (e^(-3*d^2/R^2)) for a
- * natural, gradual fade effect near the line center.
- *
- * @param renderer Pointer to the SDL rendering context used for drawing
- * primitives.
- * @param x1 Starting X coordinate of the line segment.
- * @param y1 Starting Y coordinate of the line segment.
- * @param x2 Ending X coordinate of the line segment.
- * @param y2 Ending Y coordinate of the line segment.
- * @param color The base RGB and alpha (0-255) color for the line.
- *
- * @pre Requires SDL_BLENDMODE_BLEND to be set on the renderer before calling.
- *
- * @note For lines with zero or near-zero length, a single point is drawn
- * instead.
- * @note Performance complexity: O(W*H), where W and H are dimensions of the
- * bounding box + 2*AA_RADIUS.
- */
-void SDL_RenderAALine(SDL_Renderer *renderer, int x1, int y1, int x2, int y2,
-                      const SDL_Color &color) {
+// ---------------------------------------------------------------------------
+// ① Surface-based AA line — no SDL_RenderDrawPoint calls
+// ---------------------------------------------------------------------------
+static void drawAALineOnPixels(uint8_t *pixels, int pitch,
+                               int width, int height,
+                               int x1, int y1, int x2, int y2,
+                               uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
   float dx = float(x2 - x1);
   float dy = float(y2 - y1);
   float len2 = dx * dx + dy * dy;
 
-  // Degenerate line → draw a point
   if (len2 < 1.0f) {
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 255);
-    SDL_RenderDrawPoint(renderer, x1, y1);
+    if (x1 >= 0 && x1 < width && y1 >= 0 && y1 < height) {
+      uint8_t *p = pixels + y1 * pitch + x1 * 4;
+      p[0] = r; p[1] = g; p[2] = b; p[3] = a;
+    }
     return;
   }
 
-  float invLen = 1.0f / std::sqrt(len2);
-
-  // Expand bounding box by AA radius
-  int minX = std::min(x1, x2) - int(AA_RADIUS);
-  int maxX = std::max(x1, x2) + int(AA_RADIUS);
-  int minY = std::min(y1, y2) - int(AA_RADIUS);
-  int maxY = std::max(y1, y2) + int(AA_RADIUS);
-
-  // Pre-set RGB once (alpha changes per pixel)
-  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+  // Bounding box clamped to screen
+  int minX = std::min(x1, x2) - 2;
+  int maxX = std::max(x1, x2) + 2;
+  int minY = std::min(y1, y2) - 2;
+  int maxY = std::max(y1, y2) + 2;
+  minX = std::max(0, minX); maxX = std::min(width  - 1, maxX);
+  minY = std::max(0, minY); maxY = std::min(height - 1, maxY);
 
   for (int y = minY; y <= maxY; ++y) {
+    uint8_t *row = pixels + y * pitch;
     for (int x = minX; x <= maxX; ++x) {
+      float px = x + 0.5f, py = y + 0.5f;
 
-      float px = x + 0.5f;
-      float py = y + 0.5f;
-
-      // Project pixel onto the segment using t = dot / |D|²
       float t = ((px - x1) * dx + (py - y1) * dy) / len2;
       t = std::clamp(t, 0.0f, 1.0f);
 
-      // Closest point on the segment
       float cx = x1 + dx * t;
       float cy = y1 + dy * t;
 
-      // Perpendicular distance (no pow, no sqrt)
-      float dist = std::hypot(px - cx, py - cy);
+      // ② Avoid std::hypot — use squared distance directly
+      float dist2 = (px - cx) * (px - cx) + (py - cy) * (py - cy);
 
-      if (dist < AA_RADIUS) {
-        // float alpha = 1.0f - (dist / AA_RADIUS);
-        float alpha = std::exp(-3.0f * (dist * dist) / (AA_RADIUS * AA_RADIUS));
-
-        uint8_t a = uint8_t(alpha * color.a);
-
-        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, a);
-        SDL_RenderDrawPoint(renderer, x, y);
+      if (dist2 < AA_RADIUS_SQ) {
+        float alpha = std::exp(-3.0f * dist2 / AA_RADIUS_SQ) * a;
+        uint8_t *p = row + x * 4;
+        float sa = alpha / 255.0f;
+        // Alpha-blend onto existing pixel
+        p[0] = (uint8_t)(r * sa + p[0] * (1.0f - sa));
+        p[1] = (uint8_t)(g * sa + p[1] * (1.0f - sa));
+        p[2] = (uint8_t)(b * sa + p[2] * (1.0f - sa));
+        p[3] = 255;
       }
     }
   }
 }
 
-void drawCubeEdges(SDL_Renderer *renderer, const std::vector<Point3D> &vertices,
-                   const Matrix4x4 &viewMatrix,
-                   const Matrix4x4 &projectionMatrix) {
+// ---------------------------------------------------------------------------
+// ③ Draw cube edges directly onto a pixel buffer (no per-edge SDL calls)
+// ---------------------------------------------------------------------------
+static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch,
+                                  int width, int height,
+                                  const std::vector<Point3D> &vertices,
+                                  const Matrix4x4 &viewMatrix,
+                                  const Matrix4x4 &projectionMatrix) {
+  std::vector<SDLPoint> screenPoints(vertices.size());
 
-  std::vector<SDLPoint> screenPoints;
-
-  // Model transformation M = Identity since the cube is stationary in world
-  // space. Calculate Total Transform T = P * V * I = P * V once per frame.
   Matrix4x4 totalTransform = multiply_unrolled(projectionMatrix, viewMatrix);
 
   for (size_t i = 0; i < vertices.size(); ++i) {
-    // 3. TRANSFORM POINT: Apply the final transformation (P * V * I) to get
-    // Clip Space coordinates
     float x_model = vertices[i].x;
     float y_model = vertices[i].y;
     float z_model = vertices[i].z;
 
-    // Applying the full 4x4 View-Projection transformation (Homogeneous
-    // Coordinates):
     float x_clip = totalTransform.m[0] * x_model +
                    totalTransform.m[4] * y_model +
                    totalTransform.m[8] * z_model + totalTransform.m[12];
     float y_clip = totalTransform.m[1] * x_model +
                    totalTransform.m[5] * y_model +
                    totalTransform.m[9] * z_model + totalTransform.m[13];
-    // float z_clip = ...
 
     float w_clip = totalTransform.m[3] * x_model +
                    totalTransform.m[7] * y_model +
                    totalTransform.m[11] * z_model + totalTransform.m[15];
 
-    // 4. PERSPECTIVE DIVISION & SCREEN PROJECTION: Convert Clip Space to
-    // View/Screen Space
-    float final_x = x_clip / w_clip;
-    float final_y = y_clip / w_clip;
-
-    // Use the defined coordinate conversion helper
-    screenPoints.push_back(convert({final_x, final_y, 0}));
+    screenPoints[i] = convert({ x_clip / w_clip, y_clip / w_clip, 0 });
   }
 
-  // Define the 12 edges by indices into the vertices array (0-7)
-  const int edge_indices[][2] = {
-      {0, 1}, {1, 2}, {2, 3}, {3, 0}, // Back face
-      {4, 5}, {5, 6}, {6, 7}, {7, 4}, // Front face
-      {0, 4}, {1, 5}, {2, 6}, {3, 7}  // Connecting vertical edges
+  static const int edge_indices[][2] = {
+    {0,1},{1,2},{2,3},{3,0},   // back face
+    {4,5},{5,6},{6,7},{7,4},   // front face
+    {0,4},{1,5},{2,6},{3,7},   // connecting
   };
 
-  SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // White lines
-                                                        /*
-                                                        for (const auto &edge : edge_indices) {
-                                                          int start_idx = edge[0];
-                                                          int end_idx = edge[1];
-                                                      
-                                                          // Draw line between the projected points
-                                                          SDL_RenderDrawLine(renderer, screenPoints[start_idx].x,
-                                                          screenPoints[start_idx].y, screenPoints[end_idx].x,
-                                                          screenPoints[end_idx].y);
-                                                        }
-                                                        */
-  SDL_Color line_color = {255, 255, 255, 255}; // Define the desired color once
-  for (const auto &edge : edge_indices) {
-    int start_idx = edge[0];
-    int end_idx = edge[1];
-    SDL_RenderAALine(renderer, screenPoints[start_idx].x,
-                     screenPoints[start_idx].y, screenPoints[end_idx].x,
-                     screenPoints[end_idx].y,
-                     line_color); // <-- Use the new function
-  }
+  for (const auto &e : edge_indices)
+    drawAALineOnPixels(pixels, pitch, width, height,
+                       screenPoints[e[0]].x, screenPoints[e[0]].y,
+                       screenPoints[e[1]].x, screenPoints[e[1]].y,
+                       255, 255, 255, 255);
 }
 
-int main(int argc, char *argv[]) {
-  // --- SDL Initialization ---
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+int main(int, char **) {
   TTF_Init();
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-    std::cerr << "SDL could not initialize! SDL Error: " << SDL_GetError()
-              << std::endl;
-    return 1;
+    std::cerr << "SDL init failed: " << SDL_GetError() << '\n';
+    TTF_Quit(); return 1;
   }
 
-  // --- Font Setup (Pre-load font once for performance) ---
-  TTF_Font *font =
-      TTF_OpenFont("../0xProtoNerdFont-Bold.ttf", 12); // Load at a default size
-  if (!font) {
-    std::cerr
-        << "Warning: Could not load font! Text rendering will be disabled."
-        << std::endl;
-  }
+  // ---- Font -----------------------------------------------------------
+  TTF_Font *font = TTF_OpenFont("../0xProtoNerdFont-Bold.ttf", 12);
+  if (!font)
+    std::cerr << "Warning: font not loaded — text rendering disabled.\n";
 
-  SDL_Window *window =
-      SDL_CreateWindow("Animated Camera Cube (App3)", SDL_WINDOWPOS_UNDEFINED,
-                       SDL_WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT, 0);
+  // ---- Window & Renderer ----------------------------------------------
+  SDL_Window *window = SDL_CreateWindow("Animated Camera Cube (App3)",
+      SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+      WINDOW_WIDTH, WINDOW_HEIGHT, 0);
   if (!window) {
-    std::cerr << "Window could not be created! SDL Error: " << SDL_GetError()
-              << std::endl;
-    TTF_Quit(); // Clean up TTF resources before exiting main
-    SDL_Quit();
-    return 1;
+    std::cerr << "Window failed: " << SDL_GetError() << '\n';
+    TTF_CloseFont(font); TTF_Quit(); SDL_Quit(); return 1;
   }
 
-  SDL_Renderer *renderer =
-      SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+  SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
   if (!renderer) {
-    std::cerr << "Renderer could not be created! SDL Error: " << SDL_GetError()
-              << std::endl;
-    SDL_DestroyWindow(window);
-    TTF_Quit();
-    SDL_Quit();
+    std::cerr << "Renderer failed: " << SDL_GetError() << '\n';
+    SDL_DestroyWindow(window); TTF_CloseFont(font); TTF_Quit(); SDL_Quit();
     return 1;
   }
 
-  // ( world system z up )
+  // ④ Streaming texture — lock once, draw pixels, unlock, blit (1 SDL call)
+  SDL_Texture *cubeTex = SDL_CreateTexture(
+      renderer, SDL_PIXELFORMAT_RGBA8888,
+      SDL_TEXTUREACCESS_STREAMING, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+  // ---- Geometry -------------------------------------------------------
+  // z is up there (cpp zero cost abstraction is use later to conform to openGL)
   std::vector<Point3D> my_geometry{
-      {1, -1, 0},       {1, 1, 0},       {-1, 1, 0},       {-1, -1, 0},
-      {.01, -.01, 2.5}, {.01, .01, 2.5}, {-.01, .01, 2.5}, {-.01, -.01, 2.5},
+      { 1,-1, 0}, { 1, 1, 0}, {-1, 1, 0}, {-1,-1, 0},
+      {.01,-.01, 2.5}, {.01,.01, 2.5}, {-.01,.01, 2.5}, {-.01,-.01, 2.5},
+  };
+  for (auto &v : my_geometry) v = v.to_opengl() * (CUBE_SIZE * 0.25f);// yz swap optimized at compile time.
+
+  // ---- Camera state ---------------------------------------------------
+  float angle    = 0.0f;
+  size_t count   = 0;
+  int    mode    = 0;
+  Vector3 target = {0, 0, 0};
+  Vector3 world_up{0, 1, 0};
+  float  limit   = 360;
+  Camera cam = {};  // zero-initialize
+
+  // One-time debug output (moved out of the loop)
+  {
+    Matrix4x4 m = Matrix4x4::indentity();
+    m.m[12] = 2; m.m[13] = 2; m.m[14] = 2;
+    Vector3 v{1, 1, 1};
+    std::println("Simple vertex translation:");
+    std::println("{}", m.to_string_column_major());
+    std::println("{}", transform_vertex(m, v).to_string());
+  }
+
+  Matrix4x4 projectionMatrix = createPerspectiveProjectionMatrix(
+      35.0f, (float)WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 500.0f);
+
+  // Animation mode labels
+  const char *modeLabels[] = {
+    "animation mode :'spiral up'",
+    "animation mode :'target lock'",
+    "animation mode :'orbit arc ball (from pivot)'",
+    "animation mode :'orbit arc ball (from pivot)'",
   };
 
-  for (auto &vertex : my_geometry) {
-    vertex = vertex.to_opengl() * (CUBE_SIZE * 0.25);
-  }
-
-  // --- Camera Control Variables ---
-  float angle = 0.0f; // Yaw (rotation around Y-axis)
-
-  // incremental counter.
-  size_t count = 0;
-
-  // --- Main Loop ---
+  // ---- Main loop ------------------------------------------------------
   bool quit = false;
   SDL_Event e;
 
-  auto m = Matrix4x4::indentity();
-  // translation vector.
-  m.m[12] = 2;
-  m.m[13] = 2;
-  m.m[14] = 2;
-
-  Vector3 v{1, 1, 1};
-  Vector3 result = transform_vertex(m, v);
-  auto txt = m.to_string();
-  std::println("Simple vertex translation:");
-  std::println("{0}", m.to_string_column_major());
-  std::println("{0}", result.to_string());
-
-  // Projection Setup (Remains constant)
-  Matrix4x4 projectionMatrix = createPerspectiveProjectionMatrix(
-      35.0f, (float)WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 500.0f);
-  int mode = 0;
-
-  Vector3 origin, target;
-  target = {0, 0, 0};
-  Vector3 world_up{0, 1, 0};
-  float limit = 360;
-
-  Camera cam;
   while (!quit) {
+    // ---- Input --------------------------------------------------------
     while (SDL_PollEvent(&e)) {
-      if (e.type == SDL_QUIT) {
-        quit = true;
-      }
-      // Allow camera movement on mouse drag
-      if (e.type == SDL_MOUSEMOTION && e.button.button == SDL_BUTTON_LEFT) {
-        // Simple increment for demonstration, ideally needs state tracking
-        angle += 0.001f;
-      }
-      // Allow manual reset or exit on key press
+      if (e.type == SDL_QUIT) { quit = true; continue; }
       if (e.type == SDL_KEYDOWN &&
           (e.key.keysym.sym == SDLK_ESCAPE || e.key.keysym.sym == SDLK_q)) {
         quit = true;
       }
     }
-
-    // 2. Drawing Steps
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black screen
-    SDL_RenderClear(renderer);
-    // 3. view matrix variant
-    Matrix4x4 viewMatrix;
-    switch (mode) {
-    case 0:
-      origin = circular_orbit(200, angle, angle * 130);
-      viewMatrix = look_at_view(origin, target, world_up);
-      renderText(renderer, font, "animation mode :'spiral up'", 320, 500);
-      break;
-    case 1:
-      origin = circular_orbit_transversal(400, angle);
-      viewMatrix = look_at_view(origin, target, world_up);
-      renderText(renderer, font, "animation mode :'target lock'", 320, 500);
-      break;
-    case 2:
-      target.y=2.5*((CUBE_SIZE)*0.25); // pivot pyramid tip 
-      camera_init_orbit(cam, target, 350);
-      camera_orbit(cam, target, angle, 0);
-      renderText(renderer, font,
-                 "animation mode :'orbit arc ball (from pivot)'",
-                 240, 500);
-      viewMatrix = camera_view_matrix(cam);
-      break;
-    case 3:
-      target.y=0;
-      camera_init_orbit(cam, target, 500);
-      camera_orbit(cam, target, 0, angle);
-      limit = 720;
-      viewMatrix = camera_view_matrix(cam);
-      renderText(renderer, font,
-                 "animation mode :'orbit arc ball (from pivot)'", 240,
-                 500);
-      break;
-    default:
-      break;
+    // ⑥ Fix mouse drag — check button state, not event type
+    if (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_LMASK) {
+      angle += 0.001f;
     }
 
-    // Parse view matrix on screen
-    auto txt = viewMatrix.to_string_column_major();
-    auto a = txt.substr(0, 41);
-    auto b = txt.substr(42, 41);
-    auto c = txt.substr(84, 41);
-    auto d = txt.substr(126, 41);
+    // ---- View matrix --------------------------------------------------
+    Matrix4x4 viewMatrix;
+    switch (mode) {
+      case 0:
+        target = {0,0,0};
+        viewMatrix = look_at_view(circular_orbit(200, angle, angle * 130),
+                                  target, world_up);
+        break;
+      case 1:
+        target = {0,0,0};
+        viewMatrix = look_at_view(circular_orbit_transversal(400, angle),
+                                  target, world_up);
+        break;
+      case 2:
+        target.y = 2.5f * (CUBE_SIZE * 0.25f);
+        camera_init_orbit(cam, target, 350);
+        camera_orbit(cam, target, angle, 0);
+        viewMatrix = camera_view_matrix(cam);
+        break;
+      case 3:
+        target.y = 0;
+        camera_init_orbit(cam, target, 500);
+        camera_orbit(cam, target, 0, angle);
+        viewMatrix = camera_view_matrix(cam);
+        break;
+    }
 
-    renderText(renderer, font, "View Matrix: (Column Major OpenGl Style)", 50,
-               26);
-    renderText(renderer, font, "     R         U         F         T", 50, 38);
-    renderText(renderer, font, a, 50, 50);
-    renderText(renderer, font, b, 50, 62);
-    renderText(renderer, font, c, 50, 74);
-    renderText(renderer, font, d, 50, 86);
-    renderText(
-        renderer, font,
-        std::format("rotation: {0:5.1f} deg", (angle * 360) / (M_PI * 2)), 50,
-        98);
+    // ---- Clear & draw -------------------------------------------------
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
 
-    // combine view matrix and projection matrix 
-    // then cpu compute the transformation for each vertices.
-    drawCubeEdges(renderer, my_geometry, viewMatrix, projectionMatrix);
+    // ---- Draw cube FIRST (black bg would hide text if drawn after) ----
+    void *pixels; int pitch;
+    SDL_LockTexture(cubeTex, nullptr, &pixels, &pitch);
+    std::memset(pixels, 0, pitch * WINDOW_HEIGHT);          // clear
+    drawCubeEdgesOnPixels((uint8_t *)pixels, pitch,
+                          WINDOW_WIDTH, WINDOW_HEIGHT,
+                          my_geometry, viewMatrix, projectionMatrix);
+    SDL_UnlockTexture(cubeTex);
+    SDL_RenderCopy(renderer, cubeTex, nullptr, nullptr);     // single blit
 
-    // Update the screen with rendering commands
+    // Mode label (rendered directly — cached version fails when font is null)
+    renderText(renderer, font, modeLabels[mode], 320, 500);
+
+    // Matrix header (rendered each frame — only 2 TTF calls)
+    renderText(renderer, font, "View Matrix: (Column Major OpenGl Style)", 50, 26);
+    renderText(renderer, font, "       R         U         F         T", 50, 38);
+
+    // TTF_RenderText_Blended cannot handle multi-line text (\n is ignored).
+    // Split into 4 lines and render each at its own Y position.
+    char matBuf[256];
+    viewMatrix.to_string_column_major(matBuf, sizeof(matBuf));
+    char line[45];
+    const char *p = matBuf;
+    for (int i = 0; i < 4; ++i) {
+        size_t len = strcspn(p, "\n");
+        if (len >= sizeof(line)) len = sizeof(line) - 1;
+        memcpy(line, p, len);
+        line[len] = '\0';
+        renderText(renderer, font, line, 50, 50 + i * 12);
+        p += len + 1;
+    }
+
+    std::string rotStr = std::format("rotation: {:5.1f} deg", (angle * 360) / (M_PI * 2));
+    renderText(renderer, font, rotStr.c_str(), 50, 98);
+
     SDL_RenderPresent(renderer);
 
-    // Control frame rate (approximate)
-    SDL_Delay(16); // ~60 FPS
+    // ⑧ Remove SDL_Delay — SDL_RenderPresent handles vsync
+    // SDL_Delay(16);   // ← removed
 
-    // Small animation.
     angle += (2 * M_PI / 720.0f);
 
     count++;
@@ -438,12 +343,12 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // --- Cleanup ---
+  // ---- Cleanup ----------------------------------------------------------
+  SDL_DestroyTexture(cubeTex);
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
-  TTF_CloseFont(font); // Clean up the pre-loaded font resource
+  if (font) TTF_CloseFont(font);
   TTF_Quit();
   SDL_Quit();
-
   return 0;
 }

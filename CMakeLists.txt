@@ -3,6 +3,7 @@ project(rotating_cube)
 set(CMAKE_CXX_STANDARD 23)
 
 # SDL2 + SDL2_ttf via pkg-config (works on all Linux distros)
+# if not installed install with -> "sudo apt install libsdl2-dev libsdl2-ttf-dev"
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL2 REQUIRED sdl2)
 pkg_check_modules(SDL2TTF REQUIRED SDL2_ttf)

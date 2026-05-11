@@ -4,6 +4,7 @@
 #define MATH_TYPES_H
 
 #include <cmath>
+#include <cstdio>
 #include <format>
 #include <string>
 // Define PI if not available (common in some environments)
@@ -21,15 +22,11 @@ struct Vector3 {
   inline Vector3 to_opengl() const{
     return {x,z,y};
   }
-  inline std::string to_string() {
+  inline std::string to_string() const {
     return std::format("({0},{1},{2})", x, y, z);
   }
   Vector3 operator*(float factor){
-       return {
-       x*factor
-       y*factor,
-       z*factor
-         };
+       return {x*factor,y*factor,z*factor};
   } 
   Vector3& operator+=(Vector3 const& oth){
        x+=oth.x;
@@ -115,13 +112,24 @@ struct Matrix4x4 {
                        m[9], m[10], m[11], m[12], m[13], m[14], m[15]);
   }
 
-  inline std::string to_string_column_major() {
-    return std::format("|{0:^9.3f},{1:^9.3f},{2:^9.3f},{3:^9.3f}|\n"
-                       "|{4:^9.3f},{5:^9.3f},{6:^9.3f},{7:^9.3f}|\n"
-                       "|{8:^9.3f},{9:^9.3f},{10:^9.3f},{11:^9.3f}|\n"
-                       "|{12:^9.3f},{13:^9.3f},{14:^9.3f},{15:^9.3f}|\n",
-                       m[0], m[4], m[8], m[12], m[1], m[5], m[9], m[13], m[2],
-                       m[6], m[10], m[14], m[3], m[7], m[11], m[15]);
+  /**
+   * @brief Formats the matrix into a pre-allocated buffer (avoids heap alloc).
+   *        Outputs in column-major order (R0C0, R1C0, ... R3C3, R0C1, ...)
+   */
+  inline void to_string_column_major(char* buf, std::size_t size) const {
+    std::snprintf(buf, size,
+      "|%9.3f,%9.3f,%9.3f,%9.3f   |\n"
+      "|%9.3f,%9.3f,%9.3f,%9.3f   |\n"
+      "|%9.3f,%9.3f,%9.3f,%9.3f   |\n"
+      "|%9.3f,%9.3f,%9.3f,%9.3f   |\n",
+      m[0], m[4], m[8], m[12], m[1], m[5], m[9], m[13],
+      m[2], m[6], m[10], m[14], m[3], m[7], m[11], m[15]);
+  }
+
+  inline std::string to_string_column_major() const {
+    char buf[256];
+    to_string_column_major(buf, sizeof(buf));
+    return buf;
   }
 };
 
@@ -251,6 +259,7 @@ inline void camera_move(Camera& cam, const Vector3& localMove, float speed) {
     cam.position += camera_up(cam)      * localMove.y * speed;
     cam.position += camera_forward(cam) * localMove.z * speed;
 }
+
 
 inline void camera_init_orbit(Camera& cam, const Vector3& target, float distance) {
     cam.distance    = distance;
