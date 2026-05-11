@@ -24,11 +24,10 @@ struct Vector3 {
   inline std::string to_string() {
     return std::format("({0},{1},{2})", x, y, z);
   }
-  Vector3& operator*(float factor){
-       x*=factor;
-       y*=factor;
-       z*=factor;
-       return *this;
+  Vector3 operator*(float factor){
+       return {x*factor
+       y*factor,
+       z*factor};
   } 
   Vector3& operator+=(Vector3 const& oth){
        x+=oth.x;
