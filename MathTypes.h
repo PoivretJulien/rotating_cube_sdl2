@@ -25,9 +25,11 @@ struct Vector3 {
     return std::format("({0},{1},{2})", x, y, z);
   }
   Vector3 operator*(float factor){
-       return {x*factor
+       return {
+       x*factor
        y*factor,
-       z*factor};
+       z*factor
+         };
   } 
   Vector3& operator+=(Vector3 const& oth){
        x+=oth.x;
