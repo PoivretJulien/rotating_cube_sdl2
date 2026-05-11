@@ -251,7 +251,6 @@ inline void camera_move(Camera& cam, const Vector3& localMove, float speed) {
     cam.position += camera_forward(cam) * localMove.z * speed;
 }
 
-
 inline void camera_init_orbit(Camera& cam, const Vector3& target, float distance) {
     cam.distance    = distance;
     cam.orientation = quat_identity();
