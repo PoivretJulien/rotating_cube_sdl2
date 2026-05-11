@@ -1,3 +1,6 @@
+update: temporay refactored code by my local agent
+( i will switch back to modern and fast cpp string formater next )
+
 Minimal C++ code about visual matrices.
 
 Using SDL2 as the window manager:
