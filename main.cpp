@@ -299,8 +299,11 @@ int main(int, char **) {
     SDL_RenderCopy(renderer, cubeTex, nullptr, nullptr);     // single blit
 
     // Mode label (rendered directly — cached version fails when font is null)
-    renderText(renderer, font, modeLabels[mode], 320, 500);
-
+    if(mode==2|mode==3)
+        renderText(renderer, font, modeLabels[mode], 240, 500);
+    else
+        renderText(renderer, font, modeLabels[mode], 320, 500);
+    
     // Matrix header (rendered each frame — only 2 TTF calls)
     renderText(renderer, font, "View Matrix: (Column Major OpenGl Style)", 50, 26);
     renderText(renderer, font, "       R         U         F         T", 50, 38);
