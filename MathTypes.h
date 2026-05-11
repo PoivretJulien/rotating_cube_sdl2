@@ -147,9 +147,6 @@ Vector3 transform_vertex(const Matrix4x4 &M, const Vector3 &v);
 Matrix4x4 look_at_view(const Vector3& eye,
                      const Vector3& target,
                      const Vector3& world_up = {0,1,0});
-// Experimental.
-Matrix4x4 look_at_view_quat(const Vector3& eye,
-                     const Vector3& target, Vector3& world_up);
 
 Matrix4x4 BuildViewMatrixFromEuler(float yaw, float pitch, float roll, const Vector3& pos);
 
