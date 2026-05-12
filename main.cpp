@@ -299,7 +299,7 @@ int main(int, char **) {
     SDL_RenderCopy(renderer, cubeTex, nullptr, nullptr);     // single blit
 
     // Mode label (rendered directly — cached version fails when font is null)
-    if(mode==2|mode==3)
+    if(mode==2||mode==3)
         renderText(renderer, font, modeLabels[mode], 240, 500);
     else
         renderText(renderer, font, modeLabels[mode], 320, 500);
