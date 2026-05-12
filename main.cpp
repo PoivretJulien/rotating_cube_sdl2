@@ -220,7 +220,7 @@ int main(int, char **) {
 
   // One-time debug output (moved out of the loop)
   {
-    Matrix4x4 m = Matrix4x4::indentity();
+    Matrix4x4 m = Matrix4x4::identity();
     m.m[12] = 2; m.m[13] = 2; m.m[14] = 2;
     Vector3 v{1, 1, 1};
     std::println("Simple vertex translation:");
@@ -298,33 +298,36 @@ int main(int, char **) {
     SDL_UnlockTexture(cubeTex);
     SDL_RenderCopy(renderer, cubeTex, nullptr, nullptr);     // single blit
 
-    // Mode label (rendered directly — cached version fails when font is null)
-    if(mode==2||mode==3)
-        renderText(renderer, font, modeLabels[mode], 240, 500);
+    if(mode == 2 || mode == 3)
+      // Mode label (rendered directly — cached version fails when font is null)
+      renderText(renderer, font, modeLabels[mode], 240, 500);
     else
-        renderText(renderer, font, modeLabels[mode], 320, 500);
-    
-    // Matrix header (rendered each frame — only 2 TTF calls)
-    renderText(renderer, font, "View Matrix: (Column Major OpenGl Style)", 50, 26);
-    renderText(renderer, font, "       R         U         F         T", 50, 38);
+      renderText(renderer, font, modeLabels[mode], 320, 500);
 
-    // TTF_RenderText_Blended cannot handle multi-line text (\n is ignored).
-    // Split into 4 lines and render each at its own Y position.
-    char matBuf[256];
-    viewMatrix.to_string_column_major(matBuf, sizeof(matBuf));
-    char line[45];
-    const char *p = matBuf;
-    for (int i = 0; i < 4; ++i) {
-        size_t len = strcspn(p, "\n");
-        if (len >= sizeof(line)) len = sizeof(line) - 1;
-        memcpy(line, p, len);
-        line[len] = '\0';
-        renderText(renderer, font, line, 50, 50 + i * 12);
-        p += len + 1;
-    }
+    auto txt=viewMatrix.to_string_column_major();
+    auto a = txt.substr(0, 41);
+    auto b = txt.substr(42, 41);
+    auto c = txt.substr(84, 41);
+    auto d = txt.substr(126, 41);
+    renderText(renderer, font, "View Matrix: (Column Major OpenGl Style)", 50,
+               26);
+    renderText(renderer, font, "     R         U         F         T", 50, 38);
+    renderText(renderer, font, a, 50, 50);
+    renderText(renderer, font, b, 50, 62);
+    renderText(renderer, font, c, 50, 74);
+    renderText(renderer, font, d, 50, 86);
+    renderText(
+        renderer, font,
+        std::format("rotation: {0:5.1f} deg", (angle * 360) / (M_PI * 2)), 50,
+        98);
 
-    std::string rotStr = std::format("rotation: {:5.1f} deg", (angle * 360) / (M_PI * 2));
-    renderText(renderer, font, rotStr.c_str(), 50, 98);
+    // Zero-allocation formatting into a static buffer (avoids per-frame heap alloc)
+    static char rotBuf[64];
+    auto rotResult = std::format_to_n(rotBuf, sizeof(rotBuf),
+        "rotation: {:5.1f} deg", (angle * 360) / (M_PI * 2));
+    if (rotResult.size < sizeof(rotBuf))
+      *rotResult.out = '\0';
+    renderText(renderer, font, rotBuf, 50, 98);
 
     SDL_RenderPresent(renderer);
 

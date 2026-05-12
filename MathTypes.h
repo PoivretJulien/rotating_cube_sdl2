@@ -84,7 +84,7 @@ struct Matrix4x4 {
   // m[3] m[7] m[11] m[15] -> W components (Row 3)
   float m[16];
 
-  inline static Matrix4x4 indentity(){
+  inline static Matrix4x4 identity(){
     return {
     1,0,0,0,
     0,1,0,0,
@@ -113,17 +113,19 @@ struct Matrix4x4 {
   }
 
   /**
-   * @brief Formats the matrix into a pre-allocated buffer (avoids heap alloc).
+   * @brief Formats the matrix into a pre-allocated buffer (zero heap alloc).
    *        Outputs in column-major order (R0C0, R1C0, ... R3C3, R0C1, ...)
    */
   inline void to_string_column_major(char* buf, std::size_t size) const {
-    std::snprintf(buf, size,
-      "|%9.3f,%9.3f,%9.3f,%9.3f   |\n"
-      "|%9.3f,%9.3f,%9.3f,%9.3f   |\n"
-      "|%9.3f,%9.3f,%9.3f,%9.3f   |\n"
-      "|%9.3f,%9.3f,%9.3f,%9.3f   |\n",
+    auto result = std::format_to_n(buf, size,
+      "|{0:^9.3f},{1:^9.3f},{2:^9.3f},{3:^9.3f}|\n"
+      "|{4:^9.3f},{5:^9.3f},{6:^9.3f},{7:^9.3f}|\n"
+      "|{8:^9.3f},{9:^9.3f},{10:^9.3f},{11:^9.3f}|\n"
+      "|{12:^9.3f},{13:^9.3f},{14:^9.3f},{15:^9.3f}|\n",
       m[0], m[4], m[8], m[12], m[1], m[5], m[9], m[13],
       m[2], m[6], m[10], m[14], m[3], m[7], m[11], m[15]);
+    if (result.size < size)
+      *result.out = '\0';
   }
 
   inline std::string to_string_column_major() const {
@@ -182,6 +184,22 @@ inline Quaternion quat_identity() {
     return {1, 0, 0, 0};
 }
 
+/**
+ * @brief Hamilton product: composes rotation 'a' followed by rotation 'b'.
+ *
+ * @details This is the quaternion equivalent of matrix multiplication.
+ *          The result represents applying rotation 'a' first, then rotation 'b'.
+ *
+ * @note This operation is **non-commutative**: a * b ≠ b * a in general.
+ *       - Left-multiplying (q * other) applies 'q' in the local (object) frame.
+ *       - Right-multiplying (other * q) applies 'q' in the global (world) frame.
+ *       - For Euler angles: yaw * orientation * pitch applies yaw in world space
+ *         and pitch in local space (standard FPS/CAD camera convention).
+ *
+ * @param a First rotation quaternion (left side)
+ * @param b Second rotation quaternion (right side)
+ * @return Quaternion The composed rotation (a followed by b)
+ */
 inline Quaternion operator*(const Quaternion& a, const Quaternion& b) {
     return {
         a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z,
