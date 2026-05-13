@@ -127,7 +127,9 @@ static void drawAALineOnPixels(uint8_t *pixels, int pitch,
                     uint8_t aa = uint8_t(a * alpha + da * inv);
 
                     // FIXED: correct ARGB packing
-                    row[x] = (aa << 24) | (rr << 16) | (gg << 8) | bb;
+                    //row[x] = (aa << 24) | (rr << 16) | (gg << 8) | bb;
+                    row[x] = SDL_MapRGBA(SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888),
+                                 rr, gg, bb, aa);
                 }
             }
         }
@@ -175,7 +177,7 @@ static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch,
     drawAALineOnPixels(pixels, pitch, width, height,
                        screenPoints[e[0]].x, screenPoints[e[0]].y,
                        screenPoints[e[1]].x, screenPoints[e[1]].y,
-                       255, 255,0, 255);
+                       52, 180,235, 255);
 }
 
 // ---------------------------------------------------------------------------
