@@ -1,4 +1,4 @@
-update: cpu AA fixed. (but for now color customisation did not work for cpu mesh wire) 
+update: cpu AA fixed with custom rgb value.
 i need to learn sdl for that more seriously ..., what is sure by now: im locking a sreamed sdl texture 
 in order to update the frame which result to ONE sdl call, instead of thousands calls by edges drawing points
 ( note: cpu AA is not for good performance and will break on heavy mesh, but OpenGl/Vulkan are not the purpose for now the goal is a minimal 
