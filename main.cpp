@@ -374,11 +374,6 @@ int main(int, char **) {
       renderText(renderer, font, b, 50, 62);
       renderText(renderer, font, c, 50, 74);
       renderText(renderer, font, d, 50, 86);
-      renderText(
-          renderer, font,
-          std::format("rotation: {0:5.1f} deg", (angle * 360) / (M_PI * 2)), 50,
-          98);
-
       // Zero-allocation formatting into a static buffer (avoids per-frame
       // heap alloc)
       static char rotBuf[64];
