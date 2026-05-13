@@ -127,9 +127,8 @@ static void drawAALineOnPixels(uint8_t *pixels, int pitch,
                     uint8_t aa = uint8_t(a * alpha + da * inv);
 
                     // FIXED: correct ARGB packing
-                    //row[x] = (aa << 24) | (rr << 16) | (gg << 8) | bb;
-                    row[x] = SDL_MapRGBA(SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888),
-                                 rr, gg, bb, aa);
+                    row[x] = (rr << 24) | (gg << 16) | (bb << 8) | aa;
+                    // row[x] = SDL_MapRGBA(SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888),rr, gg, bb, aa);
                 }
             }
         }
