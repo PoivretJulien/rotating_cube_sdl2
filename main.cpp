@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -66,59 +67,71 @@ static void renderText(SDL_Renderer *renderer, TTF_Font *font,
   renderText(renderer, font, text.c_str(), x, y);
 }
 
-// ---------------------------------------------------------------------------
-// ① Surface-based AA line — no SDL_RenderDrawPoint calls
-// ---------------------------------------------------------------------------
 static void drawAALineOnPixels(uint8_t *pixels, int pitch,
                                int width, int height,
                                int x1, int y1, int x2, int y2,
-                               uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-  float dx = float(x2 - x1);
-  float dy = float(y2 - y1);
-  float len2 = dx * dx + dy * dy;
+                               uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    float dx = float(x2 - x1);
+    float dy = float(y2 - y1);
+    float len2 = dx * dx + dy * dy;
 
-  if (len2 < 1.0f) {
-    if (x1 >= 0 && x1 < width && y1 >= 0 && y1 < height) {
-      uint8_t *p = pixels + y1 * pitch + x1 * 4;
-      p[0] = r; p[1] = g; p[2] = b; p[3] = a;
+    if (len2 < 1.0f) {
+        if (x1 >= 0 && x1 < width && y1 >= 0 && y1 < height) {
+            uint8_t *p = pixels + y1 * pitch + x1 * 4;
+            p[0] = r; p[1] = g; p[2] = b; p[3] = a;
+        }
+        return;
     }
-    return;
-  }
 
-  // Bounding box clamped to screen
-  int minX = std::min(x1, x2) - 2;
-  int maxX = std::max(x1, x2) + 2;
-  int minY = std::min(y1, y2) - 2;
-  int maxY = std::max(y1, y2) + 2;
-  minX = std::max(0, minX); maxX = std::min(width  - 1, maxX);
-  minY = std::max(0, minY); maxY = std::min(height - 1, maxY);
+    int minX = std::max(0, std::min(x1, x2) - 2);
+    int maxX = std::min(width  - 1, std::max(x1, x2) + 2);
+    int minY = std::max(0, std::min(y1, y2) - 2);
+    int maxY = std::min(height - 1, std::max(y1, y2) + 2);
 
-  for (int y = minY; y <= maxY; ++y) {
-    uint8_t *row = pixels + y * pitch;
-    for (int x = minX; x <= maxX; ++x) {
-      float px = x + 0.5f, py = y + 0.5f;
+    for (int y = minY; y <= maxY; ++y) {
+        uint32_t *row = (uint32_t*)(pixels + y * pitch);
 
-      float t = ((px - x1) * dx + (py - y1) * dy) / len2;
-      t = std::clamp(t, 0.0f, 1.0f);
+        for (int x = minX; x <= maxX; ++x) {
 
-      float cx = x1 + dx * t;
-      float cy = y1 + dy * t;
+            float px = x + 0.5f;
+            float py = y + 0.5f;
 
-      // ② Avoid std::hypot — use squared distance directly
-      float dist2 = (px - cx) * (px - cx) + (py - cy) * (py - cy);
+            float t = ((px - x1) * dx + (py - y1) * dy) / len2;
+            t = std::clamp(t, 0.0f, 1.0f);
 
-      if (dist2 < AA_RADIUS_SQ) {
-        float alpha = std::exp(-3.0f * dist2 / AA_RADIUS_SQ) * a;
-        uint8_t *p = row + x * 4;
-        float sa = alpha / 255.0f;
-        // Alpha-blend onto existing pixel
-        p[0] = (uint8_t)(r * sa + p[0] * (1.0f - sa));
-        p[1] = (uint8_t)(g * sa + p[1] * (1.0f - sa));
-        p[2] = (uint8_t)(b * sa + p[2] * (1.0f - sa));
-        p[3] = 255;
-      }
+            float cx = x1 + dx * t;
+            float cy = y1 + dy * t;
+
+            float dist2 = (px - cx) * (px - cx) + (py - cy) * (py - cy);
+
+            if (dist2 < AA_RADIUS_SQ) {
+
+                float alpha = std::exp(-3.0f * dist2 / AA_RADIUS_SQ) * (a / 255.0f);
+
+                if (alpha > 0.01f) {
+
+                    // Read existing pixel
+                    uint32_t dst = row[x];
+                    uint8_t dr = (dst >> 16) & 0xFF;
+                    uint8_t dg = (dst >> 8)  & 0xFF;
+                    uint8_t db = (dst)       & 0xFF;
+                    uint8_t da = (dst >> 24) & 0xFF;
+
+                    // Alpha blend
+                    float inv = 1.0f - alpha;
+
+                    uint8_t rr = uint8_t(r * alpha + dr * inv);
+                    uint8_t gg = uint8_t(g * alpha + dg * inv);
+                    uint8_t bb = uint8_t(b * alpha + db * inv);
+                    uint8_t aa = uint8_t(a * alpha + da * inv);
+
+                    // FIXED: correct ARGB packing
+                    row[x] = (aa << 24) | (rr << 16) | (gg << 8) | bb;
+                }
+            }
+        }
     }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +175,7 @@ static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch,
     drawAALineOnPixels(pixels, pitch, width, height,
                        screenPoints[e[0]].x, screenPoints[e[0]].y,
                        screenPoints[e[1]].x, screenPoints[e[1]].y,
-                       255, 255, 255, 255);
+                       255, 255,0, 255);
 }
 
 // ---------------------------------------------------------------------------
@@ -201,13 +214,13 @@ int main(int, char **) {
       renderer, SDL_PIXELFORMAT_RGBA8888,
       SDL_TEXTUREACCESS_STREAMING, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-  // ---- Geometry -------------------------------------------------------
+  // ---- Geometry -------------------------------------------------------------
   // z is up there (cpp zero cost abstraction is use later to conform to openGL)
   std::vector<Point3D> my_geometry{
       { 1,-1, 0}, { 1, 1, 0}, {-1, 1, 0}, {-1,-1, 0},
       {.01,-.01, 2.5}, {.01,.01, 2.5}, {-.01,.01, 2.5}, {-.01,-.01, 2.5},
   };
-  for (auto &v : my_geometry) v = v.to_opengl() * (CUBE_SIZE * 0.25f);// yz swap optimized at compile time.
+  for (auto &v : my_geometry) v = v.to_opengl() * (CUBE_SIZE * 0.25f); // yz swap optimized at compile time.
 
   // ---- Camera state ---------------------------------------------------
   float angle    = 0.0f;
@@ -244,6 +257,7 @@ int main(int, char **) {
   SDL_Event e;
 
   while (!quit) {
+    
     // ---- Input --------------------------------------------------------
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT) { quit = true; continue; }
@@ -316,7 +330,11 @@ int main(int, char **) {
     renderText(renderer, font, b, 50, 62);
     renderText(renderer, font, c, 50, 74);
     renderText(renderer, font, d, 50, 86);
-    
+    renderText(
+        renderer, font,
+        std::format("rotation: {0:5.1f} deg", (angle * 360) / (M_PI * 2)), 50,
+        98);
+
     // Zero-allocation formatting into a static buffer (avoids per-frame heap alloc)
     static char rotBuf[64];
     auto rotResult = std::format_to_n(rotBuf, sizeof(rotBuf),
