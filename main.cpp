@@ -1,4 +1,5 @@
 #include "MathTypes.h"
+#include "SDL_events.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <algorithm>
@@ -7,6 +8,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <format>
 #include <iostream>
 #include <print>
 #include <string>
@@ -74,6 +76,10 @@ static void renderText(SDL_Renderer *renderer, TTF_Font *font,
                        const std::string &text, int x, int y) {
   renderText(renderer, font, text.c_str(), x, y);
 }
+static void renderText(SDL_Renderer *renderer, TTF_Font *font, char &text,
+                       int x, int y) {
+  renderText(renderer, font, text, x, y);
+}
 
 static void drawAALineOnPixels(uint8_t *pixels, int pitch, int width,
                                int height, int x1, int y1, int x2, int y2,
@@ -133,7 +139,6 @@ static void drawAALineOnPixels(uint8_t *pixels, int pitch, int width,
 
           // Alpha blend
           float inv = 1.0f - alpha;
-
           uint8_t rr = uint8_t(r * alpha + dr * inv);
           uint8_t gg = uint8_t(g * alpha + dg * inv);
           uint8_t bb = uint8_t(b * alpha + db * inv);
@@ -190,6 +195,19 @@ static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch, int width,
     drawAALineOnPixels(pixels, pitch, width, height, screenPoints[e[0]].x,
                        screenPoints[e[0]].y, screenPoints[e[1]].x,
                        screenPoints[e[1]].y, 52, 180, 235, 255);
+}
+
+Uint32 WAKE_EVENT = SDL_RegisterEvents(1);
+void WakeEventLoop(void)
+{
+    SDL_Event ev;
+    // Remove old wake events
+    while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, WAKE_EVENT, WAKE_EVENT) > 0) {}
+    // Push a fresh wake event
+    SDL_Event wake;
+    SDL_zero(wake);
+    wake.type = WAKE_EVENT;
+    SDL_PushEvent(&wake);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,15 +300,21 @@ int main(int, char **) {
   bool quit = false;
   bool mouseInside = true;
   bool windowFocused = true;
+  int mouseX{0};
+  int mouseY{0};
+
+  static char rotBuf[21] = {0};
+  static char rotBufB[64] = {0};
+
   SDL_Event e;
+  bool flg = false;
   while (!quit) {
     // SDL_WaitEventTimeout(&e, 1)
-    while (SDL_WaitEventTimeout(&e, 1)) {
+    while (SDL_WaitEvent(&e)) {
       if (e.type == SDL_QUIT) {
         quit = true;
         break;
-      }
-      if (e.type == SDL_WINDOWEVENT) {
+      } else if (e.type == SDL_WINDOWEVENT) {
         switch (e.window.event) {
         case SDL_WINDOWEVENT_ENTER:
           mouseInside = true;
@@ -308,98 +332,112 @@ int main(int, char **) {
           windowFocused = false;
           break;
         }
+      } else if (e.type == SDL_MOUSEMOTION) {
+        mouseX = e.motion.x;
+        mouseY = e.motion.y;
+        if (((mouseX >= 164) && (mouseX <= 617)) &&
+            ((mouseY >= 135) && (mouseY <= 494))) {
+          flg = true;
+        } else {
+          flg = false;
+        }
       }
-    }
-    // Render only when allowed
-    if (mouseInside && windowFocused) {
-      // ---- View matrix --------------------------------------------------
-      Matrix4x4 viewMatrix;
-      switch (mode) {
-      case 0:
-        target = {0, 0, 0};
-        viewMatrix = look_at_view(circular_orbit(200, angle, angle * 130),
-                                  target, world_up);
-        break;
-      case 1:
-        target = {0, 0, 0};
-        viewMatrix = look_at_view(circular_orbit_transversal(400, angle),
-                                  target, world_up);
-        break;
-      case 2:
-        target.y = 2.5f * (CUBE_SIZE * 0.25f);
-        camera_init_orbit(cam, target, 350);
-        camera_orbit(cam, target, angle, 0);
-        viewMatrix = camera_view_matrix(cam);
-        break;
-      case 3:
-        target.y = 0;
-        camera_init_orbit(cam, target, 500);
-        camera_orbit(cam, target, 0, angle);
-        viewMatrix = camera_view_matrix(cam);
-        break;
+      /*
+      else if (e.type == WAKE_EVENT) {
+        std::println("animation trig");
       }
+      */
 
-      // ---- Clear & draw -------------------------------------------------
-      SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-      SDL_RenderClear(renderer);
+      // Render only when allowed.
+      if (mouseInside && windowFocused) {
+        // ---- View matrix --------------------------------------------------
+        Matrix4x4 viewMatrix;
+        switch (mode) {
+        case 0:
+          target = {0, 0, 0};
+          viewMatrix = look_at_view(circular_orbit(200, angle, angle * 130),
+                                    target, world_up);
+          break;
+        case 1:
+          target = {0, 0, 0};
+          viewMatrix = look_at_view(circular_orbit_transversal(400, angle),
+                                    target, world_up);
+          break;
+        case 2:
+          target.y = 2.5f * (CUBE_SIZE * 0.25f);
+          camera_init_orbit(cam, target, 350);
+          camera_orbit(cam, target, angle, 0);
+          viewMatrix = camera_view_matrix(cam);
+          break;
+        case 3:
+          target.y = 0;
+          camera_init_orbit(cam, target, 500);
+          camera_orbit(cam, target, 0, angle);
+          viewMatrix = camera_view_matrix(cam);
+          break;
+        }
 
-      // ---- Draw cube FIRST (black bg would hide text if drawn after) ----
-      void *pixels;
-      int pitch;
-      SDL_LockTexture(cubeTex, nullptr, &pixels, &pitch);
-      std::memset(pixels, 0, pitch * WINDOW_HEIGHT); // clear
-      drawCubeEdgesOnPixels((uint8_t *)pixels, pitch, WINDOW_WIDTH,
-                            WINDOW_HEIGHT, my_geometry, viewMatrix,
-                            projectionMatrix);
-      SDL_UnlockTexture(cubeTex);
-      SDL_RenderCopy(renderer, cubeTex, nullptr, nullptr); // single blit
+        // ---- Clear & draw -------------------------------------------------
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
 
-      if (mode == 2 || mode == 3)
-        // Mode label (rendered directly — cached version fails when font is
-        // null)
-        renderText(renderer, font, modeLabels[mode], 240, 500);
-      else
-        renderText(renderer, font, modeLabels[mode], 320, 500);
+        // ---- Draw cube FIRST (black bg would hide text if drawn after) ----
+        void *pixels;
+        int pitch;
+        SDL_LockTexture(cubeTex, nullptr, &pixels, &pitch);
+        std::memset(pixels, 0, pitch * WINDOW_HEIGHT); // clear
+        drawCubeEdgesOnPixels((uint8_t *)pixels, pitch, WINDOW_WIDTH,
+                              WINDOW_HEIGHT, my_geometry, viewMatrix,
+                              projectionMatrix);
+        SDL_UnlockTexture(cubeTex);
+        SDL_RenderCopy(renderer, cubeTex, nullptr, nullptr); // single blit
 
-      auto txt = viewMatrix.to_string_column_major();
-      auto a = txt.substr(0, 41);
-      auto b = txt.substr(42, 41);
-      auto c = txt.substr(84, 41);
-      auto d = txt.substr(126, 41);
-      renderText(renderer, font, "View Matrix: (Column Major OpenGl Style)", 50,
-                 26);
-      renderText(renderer, font, "     R         U         F         T", 50,
-                 38);
-      renderText(renderer, font, a, 50, 50);
-      renderText(renderer, font, b, 50, 62);
-      renderText(renderer, font, c, 50, 74);
-      renderText(renderer, font, d, 50, 86);
-      // Zero-allocation formatting into a static buffer (avoids per-frame
-      // heap alloc)
-      static char rotBuf[64];
-      auto rotResult =
-          std::format_to_n(rotBuf, sizeof(rotBuf), "rotation: {:5.1f} deg",
-                           (angle * 360) / (M_PI * 2));
-      if (rotResult.size < sizeof(rotBuf))
-        *rotResult.out = '\0';
-      renderText(renderer, font, rotBuf, 50, 98);
+        if (mode == 2 || mode == 3)
+          renderText(renderer, font, modeLabels[mode], 240, 500);
+        else
+          renderText(renderer, font, modeLabels[mode], 320, 500);
 
-      SDL_RenderPresent(renderer);
+        auto txt = viewMatrix.to_string_column_major();
+        auto a = txt.substr(0, 41);
+        auto b = txt.substr(42, 41);
+        auto c = txt.substr(84, 41);
+        auto d = txt.substr(126, 41);
+        renderText(renderer, font, "View Matrix: (Column Major OpenGl Style)",
+                   50, 26);
+        renderText(renderer, font, "     R         U         F         T", 50,
+                   38);
+        renderText(renderer, font, a, 50, 50);
+        renderText(renderer, font, b, 50, 62);
+        renderText(renderer, font, c, 50, 74);
+        renderText(renderer, font, d, 50, 86);
+        // Zero-allocation formatting into a static buffer (avoids per-frame
+        // heap alloc)
+        auto rotResult =
+            std::format_to_n(rotBuf, sizeof(rotBuf), "rotation: {:5.1f} deg",
+                             (angle * 360) / (M_PI * 2));
+        if (rotResult.size < sizeof(rotBuf))
+          *rotResult.out = '\0';
+        renderText(renderer, font, rotBuf, 50, 98);
 
-      // ⑧ Remove SDL_Delay — SDL_RenderPresent handles vsync
-      // SDL_Delay(16);   // ← removed
+        SDL_RenderPresent(renderer);
 
-      angle += (2 * M_PI / 720.0f);
+        // ⑧ Remove SDL_Delay — SDL_RenderPresent handles vsync
+        // SDL_Delay(16);   // ← removed
 
-      count++;
-      if (count >= limit) {
-        count = 0;
-        angle = 0.0f;
-        mode++;
-        if (mode == 4) {
-          limit = 360;
-          mode = 0;
-          SDL_RenderClear(renderer);
+        angle += (2 * M_PI / 720.0f);
+        count++;
+        if (flg) {
+          WakeEventLoop();
+        }
+        if (count >= limit) {
+          count = 0;
+          angle = 0.0f;
+          mode++;
+          if (mode == 4) {
+            limit = 360;
+            mode = 0;
+            SDL_RenderClear(renderer);
+          }
         }
       }
     }
