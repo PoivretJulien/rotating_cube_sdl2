@@ -84,11 +84,15 @@ static void drawAALineOnPixels(uint8_t *pixels, int pitch, int width,
 
   if (len2 < 1.0f) {
     if (x1 >= 0 && x1 < width && y1 >= 0 && y1 < height) {
+      uint32_t *row = (uint32_t *)(pixels + y1 * pitch);
+      row[x1] = (r << 24) | (g << 16) | (b << 8) | a;
+      /*
       uint8_t *p = pixels + y1 * pitch + x1 * 4;
       p[0] = r;
       p[1] = g;
       p[2] = b;
       p[3] = a;
+      */
     }
     return;
   }
@@ -280,7 +284,7 @@ int main(int, char **) {
   bool windowFocused = true;
   SDL_Event e;
   while (!quit) {
-    //SDL_WaitEventTimeout(&e, 1)
+    // SDL_WaitEventTimeout(&e, 1)
     while (SDL_WaitEventTimeout(&e, 1)) {
       if (e.type == SDL_QUIT) {
         quit = true;
