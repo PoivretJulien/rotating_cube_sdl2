@@ -157,12 +157,10 @@ Matrix4x4 look_at_view(const Vector3& eye,
     Vector3 up = world_up;
     if (fabs(dot_product(f, up)) > 0.99999f)
         up = {1,0,1};
-
-    // RIGHT = up × forward  (correct for OpenGL RH)
+  
     Vector3 r = cross_product(up, f);
     normalize(r);
-
-    // TRUE UP = forward × right
+  
     up = cross_product(f, r);
 
     Matrix4x4 M;
@@ -179,8 +177,6 @@ Matrix4x4 look_at_view(const Vector3& eye,
 
     return M;
 }
-
-
 
 Matrix4x4 createVulkanPerspectiveProjectionMatrix(float fovY_deg, float aspect,
                                                   float nearZ, float farZ) {
