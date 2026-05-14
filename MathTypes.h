@@ -319,7 +319,7 @@ inline Matrix4x4 camera_view_matrix(const Camera& cam) {
     Matrix4x4 M;
     M.m[0]  = r.x;   M.m[4]  = r.y;   M.m[8]  = r.z;   M.m[12] = -dot_product(r, cam.position);
     M.m[1]  = u.x;   M.m[5]  = u.y;   M.m[9]  = u.z;   M.m[13] = -dot_product(u, cam.position);
-    M.m[2]  = f.x;   M.m[6]  = f.y;   M.m[10] = f.z;   M.m[14] = -dot_product(f, cam.position);
+    M.m[2]  = -f.x;   M.m[6]  = -f.y;   M.m[10] = -f.z;   M.m[14] = dot_product(f, cam.position);
     M.m[3]  = 0;     M.m[7]  = 0;     M.m[11] = 0;     M.m[15] = 1;
 
     return M;

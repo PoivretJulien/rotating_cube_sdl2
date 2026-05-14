@@ -56,8 +56,10 @@ inline SDLPoint convert(const Vector3 &v) {
 // ---------------------------------------------------------------------------
 static void renderText(SDL_Renderer *renderer, TTF_Font *font, const char *text,
                        int x, int y) {
-  if (!font || !text)
+  if (!font || !text){
+    std::println("Error font not found");
     return;
+  }
   SDL_Color white = {255, 255, 255, 255};
   SDL_Surface *surf = TTF_RenderText_Blended(font, text, white);
   if (!surf)
@@ -109,6 +111,7 @@ static void drawAALineOnPixels(uint8_t *pixels, int pitch, int width,
   int maxY = std::min(height - 1, std::max(y1, y2) + 2);
 
   for (int y = minY; y <= maxY; ++y) {
+    
     uint32_t *row = (uint32_t *)(pixels + y * pitch);
 
     for (int x = minX; x <= maxX; ++x) {
@@ -177,7 +180,6 @@ static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch, int width,
     float y_clip = totalTransform.m[1] * x_model +
                    totalTransform.m[5] * y_model +
                    totalTransform.m[9] * z_model + totalTransform.m[13];
-
     float w_clip = totalTransform.m[3] * x_model +
                    totalTransform.m[7] * y_model +
                    totalTransform.m[11] * z_model + totalTransform.m[15];
@@ -239,7 +241,7 @@ int main(int, char **) {
   }
 
   SDL_Renderer *renderer =
-      SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+      SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   if (!renderer) {
     std::cerr << "Renderer failed: " << SDL_GetError() << '\n';
     SDL_DestroyWindow(window);
@@ -310,7 +312,7 @@ int main(int, char **) {
   bool flg = false;
   while (!quit) {
     // SDL_WaitEventTimeout(&e, 1)
-    while (SDL_WaitEvent(&e)) {
+    while(SDL_WaitEvent(&e)) {
       if (e.type == SDL_QUIT) {
         quit = true;
         break;
@@ -356,7 +358,9 @@ int main(int, char **) {
         case 0:
           target = {0, 0, 0};
           viewMatrix = look_at_view(circular_orbit(200, angle, angle * 130),
-                                    target, world_up);
+                                   target, world_up);
+          //viewMatrix = look_at_view(Vector3{700,700,-700},
+          //                         target, world_up);
           break;
         case 1:
           target = {0, 0, 0};
@@ -420,7 +424,6 @@ int main(int, char **) {
         renderText(renderer, font, rotBuf, 50, 98);
 
         SDL_RenderPresent(renderer);
-
         // ⑧ Remove SDL_Delay — SDL_RenderPresent handles vsync
         // SDL_Delay(16);   // ← removed
 
