@@ -309,7 +309,7 @@ int main(int, char **) {
   static char rotBuf[21] = {0};
   static char rotBufB[64] = {0};
 
-  // Avoid further inloop realocation for screenspace points.
+  // Avoid further inloop reallocation for screenspace points.
   std::vector<SDLPoint> screenPoints(my_geometry.size());
 
   SDL_Event e;
