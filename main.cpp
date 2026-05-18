@@ -56,7 +56,7 @@ inline SDLPoint convert(const Vector3 &v) {
 // ---------------------------------------------------------------------------
 static void renderText(SDL_Renderer *renderer, TTF_Font *font, const char *text,
                        int x, int y) {
-  if (!font || !text){
+  if (!font || !text) {
     std::println("Error font not found");
     return;
   }
@@ -111,7 +111,7 @@ static void drawAALineOnPixels(uint8_t *pixels, int pitch, int width,
   int maxY = std::min(height - 1, std::max(y1, y2) + 2);
 
   for (int y = minY; y <= maxY; ++y) {
-    
+
     uint32_t *row = (uint32_t *)(pixels + y * pitch);
 
     for (int x = minX; x <= maxX; ++x) {
@@ -163,10 +163,11 @@ static void drawAALineOnPixels(uint8_t *pixels, int pitch, int width,
 static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch, int width,
                                   int height,
                                   const std::vector<Point3D> &vertices,
+                                  std::vector<SDLPoint>& screenPoints,
                                   const Matrix4x4 &viewMatrix,
-                                  const Matrix4x4 &projectionMatrix) {
-  std::vector<SDLPoint> screenPoints(vertices.size());
-
+                                  const Matrix4x4 &projectionMatrix
+                                ) {
+  
   Matrix4x4 totalTransform = multiply_unrolled(projectionMatrix, viewMatrix);
 
   for (size_t i = 0; i < vertices.size(); ++i) {
@@ -200,16 +201,16 @@ static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch, int width,
 }
 
 Uint32 WAKE_EVENT = SDL_RegisterEvents(1);
-void WakeEventLoop(void)
-{
-    SDL_Event ev;
-    // Remove old wake events
-    while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, WAKE_EVENT, WAKE_EVENT) > 0) {}
-    // Push a fresh wake event
-    SDL_Event wake;
-    SDL_zero(wake);
-    wake.type = WAKE_EVENT;
-    SDL_PushEvent(&wake);
+void WakeEventLoop(void) {
+  SDL_Event ev;
+  // Remove old wake events
+  while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, WAKE_EVENT, WAKE_EVENT) > 0) {
+  }
+  // Push a fresh wake event
+  SDL_Event wake;
+  SDL_zero(wake);
+  wake.type = WAKE_EVENT;
+  SDL_PushEvent(&wake);
 }
 
 // ---------------------------------------------------------------------------
@@ -240,8 +241,8 @@ int main(int, char **) {
     return 1;
   }
 
-  SDL_Renderer *renderer =
-      SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+  SDL_Renderer *renderer = SDL_CreateRenderer(
+      window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   if (!renderer) {
     std::cerr << "Renderer failed: " << SDL_GetError() << '\n';
     SDL_DestroyWindow(window);
@@ -308,11 +309,14 @@ int main(int, char **) {
   static char rotBuf[21] = {0};
   static char rotBufB[64] = {0};
 
+  // Avoid further inloop realocation for screenspace points.
+  std::vector<SDLPoint> screenPoints(my_geometry.size());
+
   SDL_Event e;
-  bool flg = false;
+  bool cursor_in_zone = false;
   while (!quit) {
     // SDL_WaitEventTimeout(&e, 1)
-    while(SDL_WaitEvent(&e)) {
+    while (SDL_WaitEvent(&e)) {
       if (e.type == SDL_QUIT) {
         quit = true;
         break;
@@ -339,17 +343,18 @@ int main(int, char **) {
         mouseY = e.motion.y;
         if (((mouseX >= 164) && (mouseX <= 617)) &&
             ((mouseY >= 135) && (mouseY <= 494))) {
-          flg = true;
+          cursor_in_zone = true;
         } else {
-          flg = false;
+          cursor_in_zone = false;
         }
       }
+
       /*
       else if (e.type == WAKE_EVENT) {
         std::println("animation trig");
       }
       */
-
+      
       // Render only when allowed.
       if (mouseInside && windowFocused) {
         // ---- View matrix --------------------------------------------------
@@ -358,9 +363,9 @@ int main(int, char **) {
         case 0:
           target = {0, 0, 0};
           viewMatrix = look_at_view(circular_orbit(200, angle, angle * 130),
-                                   target, world_up);
-          //viewMatrix = look_at_view(Vector3{700,700,-700},
-          //                         target, world_up);
+                                    target, world_up);
+          // viewMatrix = look_at_view(Vector3{300,200,-500},
+          //                       target, world_up);
           break;
         case 1:
           target = {0, 0, 0};
@@ -391,8 +396,9 @@ int main(int, char **) {
         SDL_LockTexture(cubeTex, nullptr, &pixels, &pitch);
         std::memset(pixels, 0, pitch * WINDOW_HEIGHT); // clear
         drawCubeEdgesOnPixels((uint8_t *)pixels, pitch, WINDOW_WIDTH,
-                              WINDOW_HEIGHT, my_geometry, viewMatrix,
+                              WINDOW_HEIGHT, my_geometry,screenPoints, viewMatrix,
                               projectionMatrix);
+
         SDL_UnlockTexture(cubeTex);
         SDL_RenderCopy(renderer, cubeTex, nullptr, nullptr); // single blit
 
@@ -429,9 +435,10 @@ int main(int, char **) {
 
         angle += (2 * M_PI / 720.0f);
         count++;
-        if (flg) {
+        if (cursor_in_zone) {
           WakeEventLoop();
         }
+
         if (count >= limit) {
           count = 0;
           angle = 0.0f;
