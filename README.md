@@ -3,7 +3,7 @@ update:
       and must NOT be use as an academic blue print ... 
       it's just my personal experimentations about view matrices and perspective projection 
       in full transparency open source of what i'm doing... futher more, things will 
-      and must be refactored any time soon so it's may be an hard time to track what im doing ).
+      and must be refactored any time soon ...).
 
 Minimal C++ code about visual matrices.
 
