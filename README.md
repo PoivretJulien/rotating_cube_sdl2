@@ -1,9 +1,9 @@
 update:
-      added furstum cliping for lines drawing ( this code is a proto design ) 
-      and must NOT be use as an academic blue print ... 
-      it's just my personal experimentations about view matrices and perspective projection 
-      in full transparency open source of what i'm doing... futher more, things will 
-      and must be refactored any time soon ...).
+added furstum cliping for lines drawing ( this code is a proto design ) 
+and must NOT be use as an academic blue print ... 
+it's just my personal experimentations about view matrices and perspective projection 
+in full transparency open source of what i'm doing... futher more, things will 
+and must be refactored any time soon ...).
 
 Minimal C++ code about visual matrices.
 
