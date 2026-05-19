@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <format>
 #include <string>
+
 // Define PI if not available (common in some environments)
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -17,33 +18,33 @@
 /**
  * @brief Vector structure used throughout the math library.
  */
-struct Vector3 {
+struct Vec3 {
   float x, y, z;
-  inline Vector3 to_opengl() const{
+  inline Vec3 to_opengl() const{
     return {x,z,y};
   }
   inline std::string to_string() const {
     return std::format("({0},{1},{2})", x, y, z);
   }
-  Vector3 operator*(float factor){
+  Vec3 operator*(float factor){
        return {x*factor,y*factor,z*factor};
   } 
-  Vector3& operator+=(Vector3 const& oth){
+  Vec3& operator+=(Vec3 const& oth){
        x+=oth.x;
        y+=oth.y;
        z+=oth.z;
        return *this;
   } 
-  Vector3 operator+(const Vector3& oth) const{
+  Vec3 operator+(const Vec3& oth) const{
        return {x+oth.x,y+oth.y,z+oth.z};
   } 
 };
 
-inline Vector3 subtract(const Vector3& a, const Vector3& b) {
+inline Vec3 subtract(const Vec3& a, const Vec3& b) {
     return {a.x - b.x, a.y - b.y, a.z - b.z};
 }
 
-inline Vector3 cross_product(const Vector3& a, const Vector3& b) {
+inline Vec3 cross_product(const Vec3& a, const Vec3& b) {
     return {
         a.y * b.z - a.z * b.y,
         a.z * b.x - a.x * b.z,
@@ -51,7 +52,7 @@ inline Vector3 cross_product(const Vector3& a, const Vector3& b) {
     };
 }
 
-inline float normalize(Vector3& v) {
+inline float normalize(Vec3& v) {
     float length = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
     if (length > 1e-6f) { // Avoid division by zero or near-zero lengths
         v.x /= length;
@@ -61,12 +62,12 @@ inline float normalize(Vector3& v) {
     return length;
 }
 
-inline float dot_product(const Vector3& a, const Vector3& b) {
+inline float dot_product(const Vec3& a, const Vec3& b) {
     return 
         a.x*b.x+a.y*b.y+a.z*b.z
     ;
 }
-inline float length(const Vector3& v){
+inline float length(const Vec3& v){
     return 
         std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
@@ -153,13 +154,14 @@ Matrix4x4 multiply_unrolled(const Matrix4x4 &A, const Matrix4x4 &B);
 Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspectRatio,
                                             float nearZ, float farZ);
 
-Vector3 transform_vertex(const Matrix4x4 &M, const Vector3 &v);
+Vec3 transform_vertex(const Matrix4x4 &M, const Vec3 &v);
 
-Matrix4x4 look_at_view(const Vector3& eye,
-                     const Vector3& target,
-                     const Vector3& world_up = {0,1,0});
 
-Matrix4x4 BuildViewMatrixFromEuler(float yaw, float pitch, float roll, const Vector3& pos);
+Matrix4x4 look_at_view(const Vec3& eye,
+                     const Vec3& target,
+                     const Vec3& world_up = {0,1,0});
+
+Matrix4x4 BuildViewMatrixFromEuler(float yaw, float pitch, float roll, const Vec3& pos);
 
 /**
  *   How to use quaternions:
@@ -209,7 +211,7 @@ inline Quaternion operator*(const Quaternion& a, const Quaternion& b) {
     };
 }
 
-inline Quaternion quat_from_axis_angle(const Vector3& axis, float angle) {
+inline Quaternion quat_from_axis_angle(const Vec3& axis, float angle) {
     float s = sinf(angle * 0.5f);
     return {
         cosf(angle * 0.5f),
@@ -219,8 +221,8 @@ inline Quaternion quat_from_axis_angle(const Vector3& axis, float angle) {
     };
 }
 
-inline Vector3 rotate(const Quaternion& q, const Vector3& v) {
-    Vector3 t = {
+inline Vec3 rotate(const Quaternion& q, const Vec3& v) {
+    Vec3 t = {
         2.0f * (q.y * v.z - q.z * v.y),
         2.0f * (q.z * v.x - q.x * v.z),
         2.0f * (q.x * v.y - q.y * v.x)
@@ -242,7 +244,7 @@ inline void normalize(Quaternion& q) {
 }
 
 struct Camera {
-    Vector3 position;
+    Vec3 position;
     Quaternion orientation;
     float distance;
 };
@@ -260,35 +262,35 @@ inline void camera_zoom(Camera& cam, float delta) {
     cam.distance = std::max(0.1f, cam.distance + delta);
 }
 
-inline Vector3 camera_forward(const Camera& cam) {
+inline Vec3 camera_forward(const Camera& cam) {
     return rotate(cam.orientation, {0,0,-1});
 }
 
-inline Vector3 camera_right(const Camera& cam) {
+inline Vec3 camera_right(const Camera& cam) {
     return rotate(cam.orientation, {1,0,0});
 }
 
-inline Vector3 camera_up(const Camera& cam) {
+inline Vec3 camera_up(const Camera& cam) {
     return rotate(cam.orientation, {0,1,0});
 }
 
-inline void camera_move(Camera& cam, const Vector3& localMove, float speed) {
+inline void camera_move(Camera& cam, const Vec3& localMove, float speed) {
     cam.position += camera_right(cam)   * localMove.x * speed;
     cam.position += camera_up(cam)      * localMove.y * speed;
     cam.position += camera_forward(cam) * localMove.z * speed;
 }
 
 
-inline void camera_init_orbit(Camera& cam, const Vector3& target, float distance) {
+inline void camera_init_orbit(Camera& cam, const Vec3& target, float distance) {
     cam.distance    = distance;
     cam.orientation = quat_identity();
 
     // initial offset: camera sits behind the target
-    Vector3 offset = {0, 0, distance};
+    Vec3 offset = {0, 0, distance};
     cam.position = target + offset;
 }
 
-inline void camera_init_fps(Camera& cam, const Vector3& pos, float yaw, float pitch) {
+inline void camera_init_fps(Camera& cam, const Vec3& pos, float yaw, float pitch) {
     cam.position = pos;
 
     Quaternion qYaw   = quat_from_axis_angle({0,1,0}, yaw);
@@ -298,7 +300,7 @@ inline void camera_init_fps(Camera& cam, const Vector3& pos, float yaw, float pi
     normalize(cam.orientation);
 }
 
-inline void camera_orbit(Camera& cam, const Vector3& pivot, float yaw, float pitch) {
+inline void camera_orbit(Camera& cam, const Vec3& pivot, float yaw, float pitch) {
     Quaternion qYaw   = quat_from_axis_angle({0,1,0}, yaw);
     Quaternion qPitch = quat_from_axis_angle({1,0,0}, pitch);
 
@@ -306,15 +308,15 @@ inline void camera_orbit(Camera& cam, const Vector3& pivot, float yaw, float pit
     normalize(cam.orientation);
 
     // Orbit offset = rotated vector pointing backward by distance
-    Vector3 offset = rotate(cam.orientation, {0, 0, cam.distance});
+    Vec3 offset = rotate(cam.orientation, {0, 0, cam.distance});
     cam.position = pivot + offset;
 }
 
 inline Matrix4x4 camera_view_matrix(const Camera& cam) {
     // Extract basis from quaternion
-    Vector3 r = rotate(cam.orientation, {1,0,0});
-    Vector3 u = rotate(cam.orientation, {0,1,0});
-    Vector3 f = rotate(cam.orientation, {0,0,-1}); // forward is -Z
+    Vec3 r = rotate(cam.orientation, {1,0,0});
+    Vec3 u = rotate(cam.orientation, {0,1,0});
+    Vec3 f = rotate(cam.orientation, {0,0,-1}); // forward is -Z
 
     Matrix4x4 M;
     M.m[0]  = r.x;   M.m[4]  = r.y;   M.m[8]  = r.z;   M.m[12] = -dot_product(r, cam.position);
@@ -326,8 +328,8 @@ inline Matrix4x4 camera_view_matrix(const Camera& cam) {
 }
 
 // produce sphericall coordinates for origin points.
-Vector3 circular_orbit(float radius, float angle_radians, float height);
+Vec3 circular_orbit(float radius, float angle_radians, float height);
 // produce sphericall coordinates for origin points the circle path is tansversal.
-Vector3 circular_orbit_transversal(float radius, float angle_radians);
+Vec3 circular_orbit_transversal(float radius, float angle_radians);
 
 #endif // MATH_TYPES_H

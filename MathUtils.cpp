@@ -28,7 +28,7 @@ Matrix4x4 multiply(const Matrix4x4 &A, const Matrix4x4 &B) {
 
 Matrix4x4 multiply_unrolled(const Matrix4x4 &A, const Matrix4x4 &B) {
   Matrix4x4 C;
-
+  
   // Column 0
   C.m[0] =
       A.m[0] * B.m[0] + A.m[4] * B.m[1] + A.m[8] * B.m[2] + A.m[12] * B.m[3];
@@ -73,7 +73,7 @@ Matrix4x4 multiply_unrolled(const Matrix4x4 &A, const Matrix4x4 &B) {
 }
 
 Matrix4x4 BuildViewMatrixFromEuler(float yaw, float pitch, float roll,
-                                   const Vector3 &pos) {
+                                   const Vec3 &pos) {
   Matrix4x4 M;
 
   // --- Build quaternion from yaw (Y), pitch (X), roll (Z) ---
@@ -93,15 +93,15 @@ Matrix4x4 BuildViewMatrixFromEuler(float yaw, float pitch, float roll,
 
   // --- Extract basis vectors from quaternion ---
   // Right (+X)
-  Vector3 right(1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy + qw * qz),
+  Vec3 right(1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy + qw * qz),
                 2 * (qx * qz - qw * qy));
 
   // Up (+Y)
-  Vector3 up(2 * (qx * qy - qw * qz), 1 - 2 * (qx * qx + qz * qz),
+  Vec3 up(2 * (qx * qy - qw * qz), 1 - 2 * (qx * qx + qz * qz),
              2 * (qy * qz + qw * qx));
 
   // Forward (-Z in OpenGL)
-  Vector3 forward(2 * (qx * qz + qw * qy), 2 * (qy * qz - qw * qx),
+  Vec3 forward(2 * (qx * qz + qw * qy), 2 * (qy * qz - qw * qx),
                   1 - 2 * (qx * qx + qy * qy));
 
   // --- Build OpenGL view matrix (column-major) ---
@@ -138,7 +138,7 @@ Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspect,
 
   // Right-handed OpenGL projection (GLM style)
   P.m[0] = f / aspect;
-  P.m[5] = -f;
+  P.m[5] = f;
 
   P.m[10] = -(farZ + nearZ) / (farZ - nearZ);
   P.m[14] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
@@ -147,20 +147,23 @@ Matrix4x4 createPerspectiveProjectionMatrix(float fovY_deg, float aspect,
 
   return P;
 }
-Matrix4x4 look_at_view(const Vector3& eye,
-                       const Vector3& target,
-                       const Vector3& world_up)
+
+
+Matrix4x4 look_at_view(const Vec3& eye,
+                       const Vec3& target,
+                       const Vec3& world_up)
 {
-    Vector3 f = subtract(target, eye);
+    Vec3 f = subtract(target, eye);
     normalize(f);
 
-    Vector3 up = world_up;
+    Vec3 up = world_up;
     if (fabs(dot_product(f, up)) > 0.99999f)
         up = {1,0,1};
-  
-    Vector3 r = cross_product(up, f);
+
+    Vec3 r = cross_product(up, f);
     normalize(r);
-  
+
+
     up = cross_product(f, r);
 
     Matrix4x4 M;
@@ -177,6 +180,8 @@ Matrix4x4 look_at_view(const Vector3& eye,
 
     return M;
 }
+
+
 
 Matrix4x4 createVulkanPerspectiveProjectionMatrix(float fovY_deg, float aspect,
                                                   float nearZ, float farZ) {
@@ -212,7 +217,7 @@ Matrix4x4 createVulkanPerspectiveProjectionMatrix(float fovY_deg, float aspect,
  * @param v The input 3D vertex.
  * @return Vector3 The transformed 3D vertex.
  */
-Vector3 transform_vertex(const Matrix4x4 &M, const Vector3 &v) {
+Vec3 transform_vertex(const Matrix4x4 &M, const Vec3 &v) {
   // Treat V as homogeneous coordinate (v.x, v.y, v.z, 1.0f)
   float x = v.x;
   float y = v.y;
@@ -245,16 +250,16 @@ Vector3 transform_vertex(const Matrix4x4 &M, const Vector3 &v) {
   }
 }
 
-Vector3 circular_orbit(float radius, float angle_radians, float height) {
-  Vector3 pos;
+Vec3 circular_orbit(float radius, float angle_radians, float height) {
+  Vec3 pos;
   pos.x = radius * cos(angle_radians);
   pos.z = radius * sin(angle_radians);
   pos.y = height;
   return pos;
 }
 
-Vector3 circular_orbit_transversal(float radius, float angle_radians) {
-  Vector3 pos;
+Vec3 circular_orbit_transversal(float radius, float angle_radians) {
+  Vec3 pos;
   pos.z = radius * cos(angle_radians);
   pos.y = radius * sin(angle_radians);
   pos.x = 100;

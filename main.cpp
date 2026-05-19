@@ -44,9 +44,50 @@ struct Point3D {
 };
 
 // ---------------------------------------------------------------------------
+// convertProposal — NDC → pixel with precomputed constants, floor, and clamp
+// ---------------------------------------------------------------------------
+constexpr float HALF_WIDTH = WINDOW_WIDTH * 0.5f;
+constexpr float HALF_HEIGHT = WINDOW_HEIGHT * 0.5f;
+
+// ---------------------------------------------------------------------------
+// Converts a 3D point in Normalized Device Coordinates (NDC) to an SDL screen-space pixel.
+// The input vector `v` is expected to have x and y in the range [-1, 1], where (0,0) is
+// the center of the screen, +X goes right, and +Y goes upward (standard NDC).
+// SDL's coordinate system has its origin at the top-left corner with +Y downward,
+// so the function flips the Y axis and scales both axes to the window dimensions.
+// The result is clamped to valid pixel coordinates and returned as an SDLPoint.
+// ---------------------------------------------------------------------------
+inline SDLPoint convert(const Vec3 &v) {
+  int px = static_cast<int>(std::floor((v.x + 1.0f) * HALF_WIDTH));
+  int py = static_cast<int>(std::floor((1.0f - v.y) * HALF_HEIGHT));
+
+  px = std::clamp(px, 0, WINDOW_WIDTH - 1);
+  py = std::clamp(py, 0, WINDOW_HEIGHT - 1);
+
+  return {px, py};
+}
+
+inline SDLPoint convert_old(const Vec3& v)
+{
+    int px = std::lround((v.x + 1.0f) * 0.5f * WINDOW_WIDTH);
+    int py = std::lround((1.0f - v.y) * 0.5f * WINDOW_HEIGHT);
+
+    px = std::clamp(px, 0, WINDOW_WIDTH  - 1);
+    py = std::clamp(py, 0, WINDOW_HEIGHT - 1);
+
+    return { px, py };
+}
+
+inline SDLPoint convert_unchecked(const Vec3 &v) {
+  return {(int)((v.x + 1.0f) * 0.5f * WINDOW_WIDTH),
+          (int)((1.0f - v.y) * 0.5f * WINDOW_HEIGHT)}; // flip Y for SDL
+}
+
+
+// ---------------------------------------------------------------------------
 // Coordinate conversion  ([-1,1] → [0, W/H])
 // ---------------------------------------------------------------------------
-inline SDLPoint convert(const Vector3 &v) {
+inline SDLPoint convert_old2(const Vec3 &v) {
   return {(int)((v.x + 1.0f) * 0.5f * WINDOW_WIDTH),
           (int)((v.y + 1.0f) * 0.5f * WINDOW_HEIGHT)};
 }
@@ -158,34 +199,88 @@ static void drawAALineOnPixels(uint8_t *pixels, int pitch, int width,
 }
 
 // ---------------------------------------------------------------------------
-// ③ Draw cube edges directly onto a pixel buffer (no per-edge SDL calls)
+// drawCubeEdgesOnPixels — render a wireframe cube directly into a pixel buffer
+// -- ( this for now is limited to 8 vertices. )
+// Transforms model-space vertices through the combined projection × view matrix,
+// clips each edge against all six frustum planes (near, far, left, right, top,
+// bottom) using parametric Liang-Barsky / Cohen-Sutherland line clipping in
+// clip space, then draws the visible segments onto the supplied pixel buffer.
+//
+// Why clip in clip space (not screen space)?
+//   Perspective division (x/w, y/w) is non-linear. Interpolating screen-space
+//   coordinates across a clipped edge gives geometrically incorrect positions.
+//   By interpolating in clip space and dividing only at the final step we get
+//   correct perspective-accurate intersection points.
+//
+// Algorithm (per edge):
+//   1. Transform each vertex to clip space (x_clip, y_clip, z_clip, w_clip).
+//   2. Compute the visible t-interval [t_min, t_max] along the edge by clipping
+//      against each frustum plane in sequence:
+//        Near:   z_clip >= 0
+//        Far:    w_clip - z_clip >= 0
+//        Left:   x_clip + w_clip >= 0
+//        Right:  w_clip - x_clip >= 0
+//        Bottom: y_clip + w_clip >= 0
+//        Top:    w_clip - y_clip >= 0
+//      For each plane, if one endpoint is inside and one is outside, compute
+//      the intersection parameter t = v_in / (v_in - v_out) and tighten the
+//      interval (t_min = max(t_min, t) for entering, t_max = min(t_max, t)
+//      for exiting). If both endpoints are outside the same plane, skip the
+//      edge entirely.
+//   3. If t_min >= t_max after all planes, the edge has no visible portion.
+//   4. Interpolate clip-space x, y, w at t_min and t_max, perspective-divide
+//      to get NDC → convert to screen-space pixels.
+//   5. Draw the resulting line segment with anti-aliased pixel writing.
+//
+// Parameters:
+//   pixels        — raw pixel buffer (RGBA8888, 4 bytes per pixel)
+//   pitch         — byte stride between rows in the pixel buffer
+//   width/height  — viewport dimensions in pixels
+//   vertices      — model-space cube vertices (8 Point3D)
+//   screenPoints  — output array for pre-perspective-divided NDC positions
+//   viewMatrix    — camera view matrix (column-major)
+//   projectionMatrix — perspective projection matrix (column-major)
+//
+// Returns: nothing. Edges are written directly into the pixel buffer.
 // ---------------------------------------------------------------------------
 static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch, int width,
                                   int height,
                                   const std::vector<Point3D> &vertices,
-                                  std::vector<SDLPoint>& screenPoints,
+                                  std::vector<SDLPoint> &screenPoints,
                                   const Matrix4x4 &viewMatrix,
-                                  const Matrix4x4 &projectionMatrix
-                                ) {
-  
+                                  const Matrix4x4 &projectionMatrix) {
+
   Matrix4x4 totalTransform = multiply_unrolled(projectionMatrix, viewMatrix);
 
-  for (size_t i = 0; i < vertices.size(); ++i) {
+  // Clip-space coords per vertex — stack array avoids heap allocation every frame.
+  const size_t N = vertices.size();
+  float clip_x[8], clip_y[8], clip_z[8], clip_w[8];
+
+  for (size_t i = 0; i < N; ++i) {
     float x_model = vertices[i].x;
     float y_model = vertices[i].y;
     float z_model = vertices[i].z;
 
-    float x_clip = totalTransform.m[0] * x_model +
-                   totalTransform.m[4] * y_model +
-                   totalTransform.m[8] * z_model + totalTransform.m[12];
-    float y_clip = totalTransform.m[1] * x_model +
-                   totalTransform.m[5] * y_model +
-                   totalTransform.m[9] * z_model + totalTransform.m[13];
-    float w_clip = totalTransform.m[3] * x_model +
-                   totalTransform.m[7] * y_model +
-                   totalTransform.m[11] * z_model + totalTransform.m[15];
+    clip_x[i] = totalTransform.m[0] * x_model +
+                totalTransform.m[4] * y_model +
+                totalTransform.m[8] * z_model + totalTransform.m[12];
+    clip_y[i] = totalTransform.m[1] * x_model +
+                totalTransform.m[5] * y_model +
+                totalTransform.m[9] * z_model + totalTransform.m[13];
+    clip_z[i] = totalTransform.m[2] * x_model +
+                totalTransform.m[6] * y_model +
+                totalTransform.m[10] * z_model + totalTransform.m[14];
+    clip_w[i] = totalTransform.m[3] * x_model +
+                totalTransform.m[7] * y_model +
+                totalTransform.m[11] * z_model + totalTransform.m[15];
 
-    screenPoints[i] = convert({x_clip / w_clip, y_clip / w_clip, 0});
+    // Guard against vertices on or behind the camera eye point.
+    if (clip_w[i] <= 0.0f) {
+      screenPoints[i] = {-1, -1};
+      continue;
+    }
+
+    screenPoints[i] = convert({clip_x[i] / clip_w[i], clip_y[i] / clip_w[i], 0});
   }
 
   static const int edge_indices[][2] = {
@@ -194,10 +289,80 @@ static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch, int width,
       {0, 4}, {1, 5}, {2, 6}, {3, 7}, // connecting
   };
 
-  for (const auto &e : edge_indices)
-    drawAALineOnPixels(pixels, pitch, width, height, screenPoints[e[0]].x,
-                       screenPoints[e[0]].y, screenPoints[e[1]].x,
-                       screenPoints[e[1]].y, 52, 180, 235, 255);
+  // Clip each edge against all 6 frustum planes using parametric line clipping.
+  // The edge is parameterized as P(t) = A + t*(B-A), t ∈ [0, 1].
+  // For each plane the "inside" value is:
+  //   Near:    z_clip >= 0
+  //   Far:     w_clip - z_clip >= 0
+  //   Left:    x_clip + w_clip >= 0
+  //   Right:   w_clip - x_clip >= 0
+  //   Bottom:  y_clip + w_clip >= 0
+  //   Top:     w_clip - y_clip >= 0
+  // We maintain the visible t-interval [t_min, t_max] and clip it against
+  // each plane in sequence (Cohen-Sutherland / Liang-Barsky style).
+
+  float half_width = width * 0.5f;
+  float half_height = height * 0.5f;
+
+  for (const auto &e : edge_indices) {
+    int a = e[0], b = e[1];
+    float t_min = 0.0f, t_max = 1.0f;
+
+    // Early-exit: if either vertex is on/behind the camera, skip the edge.
+    if (clip_w[a] <= 0.0f || clip_w[b] <= 0.0f) continue;
+
+    // Helper: clip an edge against one frustum plane.
+    // Returns true if the edge still has a visible portion after clipping.
+    auto clip_against = [&](float va, float vb) -> bool {
+      if (va < 0 && vb < 0) return false;       // both out → skip
+      if (va >= 0 && vb >= 0) return true;      // both in — no change
+      float t = va / (va - vb);
+      if (va < 0) {
+        t_min = std::max(t_min, t);              // entering → raise lower bound
+      } else {
+        t_max = std::min(t_max, t);              // exiting → lower upper bound
+      }
+      return t_min < t_max;                       // still visible?
+    };
+
+    // Near plane
+    if (!clip_against(clip_z[a], clip_z[b])) continue;
+    // Far plane
+    if (!clip_against(clip_w[a] - clip_z[a], clip_w[b] - clip_z[b])) continue;
+    // Left plane
+    if (!clip_against(clip_x[a] + clip_w[a], clip_x[b] + clip_w[b])) continue;
+    // Right plane
+    if (!clip_against(clip_w[a] - clip_x[a], clip_w[b] - clip_x[b])) continue;
+    // Bottom plane
+    if (!clip_against(clip_y[a] + clip_w[a], clip_y[b] + clip_w[b])) continue;
+    // Top plane
+    if (!clip_against(clip_w[a] - clip_y[a], clip_w[b] - clip_y[b])) continue;
+
+    // Clamp t to [0, 1] for safety (handles edge cases like w_clip ≈ 0).
+    t_min = std::max(0.0f, std::min(1.0f, t_min));
+    t_max = std::max(0.0f, std::min(1.0f, t_max));
+    if (t_min >= t_max) continue;
+
+    // Helper: clip-space → screen-space at parameter t.
+    // No need to re-clamp here — convert() already clamps to [0, W/H-1].
+    auto clipToScreen = [&](float t) -> std::pair<int, int> {
+      float ix = clip_x[a] + t * (clip_x[b] - clip_x[a]);
+      float iy = clip_y[a] + t * (clip_y[b] - clip_y[a]);
+      float iw = clip_w[a] + t * (clip_w[b] - clip_w[a]);
+      float ndc_x = ix / iw;
+      float ndc_y = iy / iw;
+      return {
+        static_cast<int>(std::floor((ndc_x + 1.0f) * half_width)),
+        static_cast<int>(std::floor((1.0f - ndc_y) * half_height))
+      };
+    };
+
+    auto [sx0, sy0] = clipToScreen(t_min);
+    auto [sx1, sy1] = clipToScreen(t_max);
+
+    drawAALineOnPixels(pixels, pitch, width, height, sx0, sy0, sx1, sy1,
+                       52, 180, 235, 255);
+  }
 }
 
 Uint32 WAKE_EVENT = SDL_RegisterEvents(1);
@@ -271,8 +436,8 @@ int main(int, char **) {
   float angle = 0.0f;
   size_t count = 0;
   int mode = 0;
-  Vector3 target = {0, 0, 0};
-  Vector3 world_up{0, 1, 0};
+  Vec3 target = {0, 0, 0};
+  Vec3 world_up{0, 1, 0};
   float limit = 360;
   Camera cam = {}; // zero-initialize
 
@@ -282,14 +447,14 @@ int main(int, char **) {
     m.m[12] = 2;
     m.m[13] = 2;
     m.m[14] = 2;
-    Vector3 v{1, 1, 1};
+    Vec3 v{1, 1, 1};
     std::println("Simple vertex translation:");
     std::println("{}", m.to_string_column_major());
     std::println("{}", transform_vertex(m, v).to_string());
   }
 
   Matrix4x4 projectionMatrix = createPerspectiveProjectionMatrix(
-      35.0f, (float)WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 500.0f);
+      35.0f, (float)WINDOW_WIDTH / WINDOW_HEIGHT, 0.1f, 10000.0f);
 
   // Animation mode labels
   const char *modeLabels[] = {
@@ -354,7 +519,7 @@ int main(int, char **) {
         std::println("animation trig");
       }
       */
-      
+
       // Render only when allowed.
       if (mouseInside && windowFocused) {
         // ---- View matrix --------------------------------------------------
@@ -396,8 +561,8 @@ int main(int, char **) {
         SDL_LockTexture(cubeTex, nullptr, &pixels, &pitch);
         std::memset(pixels, 0, pitch * WINDOW_HEIGHT); // clear
         drawCubeEdgesOnPixels((uint8_t *)pixels, pitch, WINDOW_WIDTH,
-                              WINDOW_HEIGHT, my_geometry,screenPoints, viewMatrix,
-                              projectionMatrix);
+                              WINDOW_HEIGHT, my_geometry, screenPoints,
+                              viewMatrix, projectionMatrix);
 
         SDL_UnlockTexture(cubeTex);
         SDL_RenderCopy(renderer, cubeTex, nullptr, nullptr); // single blit
@@ -430,6 +595,7 @@ int main(int, char **) {
         renderText(renderer, font, rotBuf, 50, 98);
 
         SDL_RenderPresent(renderer);
+        
         // ⑧ Remove SDL_Delay — SDL_RenderPresent handles vsync
         // SDL_Delay(16);   // ← removed
 
