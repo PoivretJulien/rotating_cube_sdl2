@@ -50,12 +50,13 @@ constexpr float HALF_WIDTH = WINDOW_WIDTH * 0.5f;
 constexpr float HALF_HEIGHT = WINDOW_HEIGHT * 0.5f;
 
 // ---------------------------------------------------------------------------
-// Converts a 3D point in Normalized Device Coordinates (NDC) to an SDL screen-space pixel.
-// The input vector `v` is expected to have x and y in the range [-1, 1], where (0,0) is
-// the center of the screen, +X goes right, and +Y goes upward (standard NDC).
-// SDL's coordinate system has its origin at the top-left corner with +Y downward,
-// so the function flips the Y axis and scales both axes to the window dimensions.
-// The result is clamped to valid pixel coordinates and returned as an SDLPoint.
+// Converts a 3D point in Normalized Device Coordinates (NDC) to an SDL
+// screen-space pixel. The input vector `v` is expected to have x and y in the
+// range [-1, 1], where (0,0) is the center of the screen, +X goes right, and +Y
+// goes upward (standard NDC). SDL's coordinate system has its origin at the
+// top-left corner with +Y downward, so the function flips the Y axis and scales
+// both axes to the window dimensions. The result is clamped to valid pixel
+// coordinates and returned as an SDLPoint.
 // ---------------------------------------------------------------------------
 inline SDLPoint convert(const Vec3 &v) {
   int px = static_cast<int>(std::floor((v.x + 1.0f) * HALF_WIDTH));
@@ -65,31 +66,6 @@ inline SDLPoint convert(const Vec3 &v) {
   py = std::clamp(py, 0, WINDOW_HEIGHT - 1);
 
   return {px, py};
-}
-
-inline SDLPoint convert_old(const Vec3& v)
-{
-    int px = std::lround((v.x + 1.0f) * 0.5f * WINDOW_WIDTH);
-    int py = std::lround((1.0f - v.y) * 0.5f * WINDOW_HEIGHT);
-
-    px = std::clamp(px, 0, WINDOW_WIDTH  - 1);
-    py = std::clamp(py, 0, WINDOW_HEIGHT - 1);
-
-    return { px, py };
-}
-
-inline SDLPoint convert_unchecked(const Vec3 &v) {
-  return {(int)((v.x + 1.0f) * 0.5f * WINDOW_WIDTH),
-          (int)((1.0f - v.y) * 0.5f * WINDOW_HEIGHT)}; // flip Y for SDL
-}
-
-
-// ---------------------------------------------------------------------------
-// Coordinate conversion  ([-1,1] → [0, W/H])
-// ---------------------------------------------------------------------------
-inline SDLPoint convert_old2(const Vec3 &v) {
-  return {(int)((v.x + 1.0f) * 0.5f * WINDOW_WIDTH),
-          (int)((v.y + 1.0f) * 0.5f * WINDOW_HEIGHT)};
 }
 
 // ---------------------------------------------------------------------------
@@ -124,87 +100,159 @@ static void renderText(SDL_Renderer *renderer, TTF_Font *font, char &text,
   renderText(renderer, font, text, x, y);
 }
 
-static void drawAALineOnPixels(uint8_t *pixels, int pitch, int width,
-                               int height, int x1, int y1, int x2, int y2,
-                               uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-  float dx = float(x2 - x1);
-  float dy = float(y2 - y1);
-  float len2 = dx * dx + dy * dy;
+/**
+ * @brief Draws an anti-aliased line with alpha blending onto a pixel buffer.
+ *
+ * Renders a line from (x1, y1) to (x2, y2) using Gaussian-based
+ * anti-aliasing within AA_RADIUS_SQ pixels of the line segment.
+ * Each pixel is alpha-blended with the existing framebuffer value.
+ *
+ * ---
+ * How it works:
+ *
+ * 1. **Degenerate line check** — Computes the squared length of the line.
+ *    If it is below 1e-6, the function returns early (no visible line).
+ *
+ * 2. **Bounding box** — Computes a tight bounding box around the line segment,
+ *    expanded by ±2 pixels on each side. The box is clamped to the framebuffer
+ *    boundaries so no out-of-bounds memory access occurs.
+ *
+ * 3. **Per-pixel evaluation** — Iterates over every pixel inside the bounding box.
+ *    For each pixel:
+ *
+ *    a. **Closest point on segment** — Projects the pixel center (x+0.5, y+0.5)
+ *       onto the line segment using parametric form:
+ *         t = ((px-x1)·dx + (py-y1)·dy) / |d|²
+ *       The parameter t is clamped to [0, 1] so the closest point stays on the
+ *       segment (not on the infinite line), correctly handling end caps.
+ *
+ *    b. **Distance check** — Computes the squared Euclidean distance from the
+ *       pixel center to the closest point. If it exceeds AA_RADIUS_SQ, the
+ *       pixel is skipped entirely.
+ *
+ *    c. **Gaussian alpha** — Computes a per-pixel alpha value using a Gaussian
+ *       falloff:
+ *         α = exp(-3 · dist² / AA_RADIUS_SQ) · (a / 255)
+ *       The factor of 3 ensures the alpha drops to ~5% at the radius boundary.
+ *
+ *    d. **Alpha-blend** — Blends the new color (r, g, b, a) over the existing
+ *       pixel using over-compositing:
+ *         new = color · α + dst · (1 - α)
+ *       The result is written back as an RGBA8888 uint32 in little-endian
+ *       byte order (R in the highest byte).
+ *
+ * @param pixels  Pointer to the top-left pixel of the framebuffer (RGBA8888, 4 bytes per pixel).
+ * @param pitch   Number of bytes per row (stride).
+ * @param width   Framebuffer width in pixels.
+ * @param height  Framebuffer height in pixels.
+ * @param x1      X coordinate of the line start point.
+ * @param y1      Y coordinate of the line start point.
+ * @param x2      X coordinate of the line end point.
+ * @param y2      Y coordinate of the line end point.
+ * @param r       Red component (0-255).
+ * @param g       Green component (0-255).
+ * @param b       Blue component (0-255).
+ * @param a       Alpha component (0-255).
+ */
+static void drawAALineCore(
+    uint8_t* pixels, int pitch, int width, int height,
+    float x1, float y1, float x2, float y2,
+    uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    float len2 = dx*dx + dy*dy;
 
-  if (len2 < 1.0f) {
-    if (x1 >= 0 && x1 < width && y1 >= 0 && y1 < height) {
-      uint32_t *row = (uint32_t *)(pixels + y1 * pitch);
-      row[x1] = (r << 24) | (g << 16) | (b << 8) | a;
-      /*
-      uint8_t *p = pixels + y1 * pitch + x1 * 4;
-      p[0] = r;
-      p[1] = g;
-      p[2] = b;
-      p[3] = a;
-      */
-    }
-    return;
-  }
+    if (len2 < 1e-6f)
+        return;
 
-  int minX = std::max(0, std::min(x1, x2) - 2);
-  int maxX = std::min(width - 1, std::max(x1, x2) + 2);
-  int minY = std::max(0, std::min(y1, y2) - 2);
-  int maxY = std::min(height - 1, std::max(y1, y2) + 2);
+    float minXf = std::min(x1, x2) - 2.0f;
+    float maxXf = std::max(x1, x2) + 2.0f;
+    float minYf = std::min(y1, y2) - 2.0f;
+    float maxYf = std::max(y1, y2) + 2.0f;
 
-  for (int y = minY; y <= maxY; ++y) {
+    int minX = std::max(0, int(std::floor(minXf)));
+    int maxX = std::min(width  - 1, int(std::ceil (maxXf)));
+    int minY = std::max(0, int(std::floor(minYf)));
+    int maxY = std::min(height - 1, int(std::ceil (maxYf)));
 
-    uint32_t *row = (uint32_t *)(pixels + y * pitch);
+    for (int y = minY; y <= maxY; ++y) {
+        uint8_t* row = pixels + y * pitch;
 
-    for (int x = minX; x <= maxX; ++x) {
+        for (int x = minX; x <= maxX; ++x) {
 
-      float px = x + 0.5f;
-      float py = y + 0.5f;
+            float px = x + 0.5f;
+            float py = y + 0.5f;
 
-      float t = ((px - x1) * dx + (py - y1) * dy) / len2;
-      t = std::clamp(t, 0.0f, 1.0f);
+            float t = ((px - x1)*dx + (py - y1)*dy) / len2;
+            t = std::clamp(t, 0.0f, 1.0f);
 
-      float cx = x1 + dx * t;
-      float cy = y1 + dy * t;
+            float cx = x1 + dx * t;
+            float cy = y1 + dy * t;
 
-      float dist2 = (px - cx) * (px - cx) + (py - cy) * (py - cy);
+            float dist2 = (px - cx)*(px - cx) + (py - cy)*(py - cy);
 
-      if (dist2 < AA_RADIUS_SQ) {
+            if (dist2 < AA_RADIUS_SQ) {
 
-        float alpha = std::exp(-3.0f * dist2 / AA_RADIUS_SQ) * (a / 255.0f);
+                float alpha = std::exp(-3.0f * dist2 / AA_RADIUS_SQ) * (a / 255.0f);
+                if (alpha <= 0.01f)
+                    continue;
 
-        if (alpha > 0.01f) {
+                uint32_t* p = (uint32_t*)(row + x * 4);
+                uint32_t dst = *p;
 
-          // Read existing pixel
-          uint32_t dst = row[x];
-          uint8_t dr = (dst >> 16) & 0xFF;
-          uint8_t dg = (dst >> 8) & 0xFF;
-          uint8_t db = (dst) & 0xFF;
-          uint8_t da = (dst >> 24) & 0xFF;
+                uint8_t dr = (dst >> 24) & 0xFF;
+                uint8_t dg = (dst >> 16) & 0xFF;
+                uint8_t db = (dst >> 8)  & 0xFF;
+                uint8_t da = (dst)       & 0xFF;
 
-          // Alpha blend
-          float inv = 1.0f - alpha;
-          uint8_t rr = uint8_t(r * alpha + dr * inv);
-          uint8_t gg = uint8_t(g * alpha + dg * inv);
-          uint8_t bb = uint8_t(b * alpha + db * inv);
-          uint8_t aa = uint8_t(a * alpha + da * inv);
+                float inv = 1.0f - alpha;
 
-          // FIXED: correct ARGB packing
-          // row[x] = SDL_MapRGBA(SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888),rr,
-          // gg, bb, aa);
-          row[x] = (rr << 24) | (gg << 16) | (bb << 8) | aa;
+                uint8_t rr = uint8_t(r * alpha + dr * inv);
+                uint8_t gg = uint8_t(g * alpha + dg * inv);
+                uint8_t bb = uint8_t(b * alpha + db * inv);
+                uint8_t aa = uint8_t(a * alpha + da * inv);
+
+                *p = (rr << 24) | (gg << 16) | (bb << 8) | aa;
+            }
         }
-      }
     }
-  }
 }
+
+static void drawAALineOnPixels(
+    uint8_t* pixels, int pitch, int width, int height,
+    int x1, int y1, int x2, int y2,
+    uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    drawAALineCore(
+        pixels, pitch, width, height,
+        float(x1), float(y1), float(x2), float(y2),
+        r, g, b, a
+    );
+}
+
+void drawAALineOnPixels(
+    uint8_t* pixels, int pitch, int width, int height,
+    float x1f, float y1f, float x2f, float y2f,
+    uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    drawAALineCore(
+        pixels, pitch, width, height,
+        x1f, y1f, x2f, y2f,
+        r, g, b, a
+    );
+}
+
+
 
 // ---------------------------------------------------------------------------
 // drawCubeEdgesOnPixels — render a wireframe cube directly into a pixel buffer
 // -- ( this for now is limited to 8 vertices. )
-// Transforms model-space vertices through the combined projection × view matrix,
-// clips each edge against all six frustum planes (near, far, left, right, top,
-// bottom) using parametric Liang-Barsky / Cohen-Sutherland line clipping in
-// clip space, then draws the visible segments onto the supplied pixel buffer.
+// Transforms model-space vertices through the combined projection × view
+// matrix, clips each edge against all six frustum planes (near, far, left,
+// right, top, bottom) using parametric Liang-Barsky / Cohen-Sutherland line
+// clipping in clip space, then draws the visible segments onto the supplied
+// pixel buffer.
 //
 // Why clip in clip space (not screen space)?
 //   Perspective division (x/w, y/w) is non-linear. Interpolating screen-space
@@ -252,7 +300,8 @@ static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch, int width,
 
   Matrix4x4 totalTransform = multiply_unrolled(projectionMatrix, viewMatrix);
 
-  // Clip-space coords per vertex — stack array avoids heap allocation every frame.
+  // Clip-space coords per vertex — stack array avoids heap allocation every
+  // frame.
   const size_t N = vertices.size();
   float clip_x[8], clip_y[8], clip_z[8], clip_w[8];
 
@@ -261,17 +310,13 @@ static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch, int width,
     float y_model = vertices[i].y;
     float z_model = vertices[i].z;
 
-    clip_x[i] = totalTransform.m[0] * x_model +
-                totalTransform.m[4] * y_model +
+    clip_x[i] = totalTransform.m[0] * x_model + totalTransform.m[4] * y_model +
                 totalTransform.m[8] * z_model + totalTransform.m[12];
-    clip_y[i] = totalTransform.m[1] * x_model +
-                totalTransform.m[5] * y_model +
+    clip_y[i] = totalTransform.m[1] * x_model + totalTransform.m[5] * y_model +
                 totalTransform.m[9] * z_model + totalTransform.m[13];
-    clip_z[i] = totalTransform.m[2] * x_model +
-                totalTransform.m[6] * y_model +
+    clip_z[i] = totalTransform.m[2] * x_model + totalTransform.m[6] * y_model +
                 totalTransform.m[10] * z_model + totalTransform.m[14];
-    clip_w[i] = totalTransform.m[3] * x_model +
-                totalTransform.m[7] * y_model +
+    clip_w[i] = totalTransform.m[3] * x_model + totalTransform.m[7] * y_model +
                 totalTransform.m[11] * z_model + totalTransform.m[15];
 
     // Guard against vertices on or behind the camera eye point.
@@ -280,7 +325,8 @@ static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch, int width,
       continue;
     }
 
-    screenPoints[i] = convert({clip_x[i] / clip_w[i], clip_y[i] / clip_w[i], 0});
+    screenPoints[i] =
+        convert({clip_x[i] / clip_w[i], clip_y[i] / clip_w[i], 0});
   }
 
   static const int edge_indices[][2] = {
@@ -309,39 +355,49 @@ static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch, int width,
     float t_min = 0.0f, t_max = 1.0f;
 
     // Early-exit: if either vertex is on/behind the camera, skip the edge.
-    if (clip_w[a] <= 0.0f || clip_w[b] <= 0.0f) continue;
+    if (clip_w[a] <= 0.0f || clip_w[b] <= 0.0f)
+      continue;
 
     // Helper: clip an edge against one frustum plane.
     // Returns true if the edge still has a visible portion after clipping.
     auto clip_against = [&](float va, float vb) -> bool {
-      if (va < 0 && vb < 0) return false;       // both out → skip
-      if (va >= 0 && vb >= 0) return true;      // both in — no change
+      if (va < 0 && vb < 0)
+        return false; // both out → skip
+      if (va >= 0 && vb >= 0)
+        return true; // both in — no change
       float t = va / (va - vb);
       if (va < 0) {
-        t_min = std::max(t_min, t);              // entering → raise lower bound
+        t_min = std::max(t_min, t); // entering → raise lower bound
       } else {
-        t_max = std::min(t_max, t);              // exiting → lower upper bound
+        t_max = std::min(t_max, t); // exiting → lower upper bound
       }
-      return t_min < t_max;                       // still visible?
+      return t_min < t_max; // still visible?
     };
 
     // Near plane
-    if (!clip_against(clip_z[a], clip_z[b])) continue;
+    if (!clip_against(clip_z[a], clip_z[b]))
+      continue;
     // Far plane
-    if (!clip_against(clip_w[a] - clip_z[a], clip_w[b] - clip_z[b])) continue;
+    if (!clip_against(clip_w[a] - clip_z[a], clip_w[b] - clip_z[b]))
+      continue;
     // Left plane
-    if (!clip_against(clip_x[a] + clip_w[a], clip_x[b] + clip_w[b])) continue;
+    if (!clip_against(clip_x[a] + clip_w[a], clip_x[b] + clip_w[b]))
+      continue;
     // Right plane
-    if (!clip_against(clip_w[a] - clip_x[a], clip_w[b] - clip_x[b])) continue;
+    if (!clip_against(clip_w[a] - clip_x[a], clip_w[b] - clip_x[b]))
+      continue;
     // Bottom plane
-    if (!clip_against(clip_y[a] + clip_w[a], clip_y[b] + clip_w[b])) continue;
+    if (!clip_against(clip_y[a] + clip_w[a], clip_y[b] + clip_w[b]))
+      continue;
     // Top plane
-    if (!clip_against(clip_w[a] - clip_y[a], clip_w[b] - clip_y[b])) continue;
+    if (!clip_against(clip_w[a] - clip_y[a], clip_w[b] - clip_y[b]))
+      continue;
 
     // Clamp t to [0, 1] for safety (handles edge cases like w_clip ≈ 0).
     t_min = std::max(0.0f, std::min(1.0f, t_min));
     t_max = std::max(0.0f, std::min(1.0f, t_max));
-    if (t_min >= t_max) continue;
+    if (t_min >= t_max)
+      continue;
 
     // Helper: clip-space → screen-space at parameter t.
     // No need to re-clamp here — convert() already clamps to [0, W/H-1].
@@ -351,17 +407,15 @@ static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch, int width,
       float iw = clip_w[a] + t * (clip_w[b] - clip_w[a]);
       float ndc_x = ix / iw;
       float ndc_y = iy / iw;
-      return {
-        static_cast<int>(std::floor((ndc_x + 1.0f) * half_width)),
-        static_cast<int>(std::floor((1.0f - ndc_y) * half_height))
-      };
+      return {static_cast<int>(std::floor((ndc_x + 1.0f) * half_width)),
+              static_cast<int>(std::floor((1.0f - ndc_y) * half_height))};
     };
 
     auto [sx0, sy0] = clipToScreen(t_min);
     auto [sx1, sy1] = clipToScreen(t_max);
 
-    drawAALineOnPixels(pixels, pitch, width, height, sx0, sy0, sx1, sy1,
-                       52, 180, 235, 255);
+    drawAALineOnPixels(pixels, pitch, width, height, sx0, sy0, sx1, sy1, 52,
+                       180, 235, 255);
   }
 }
 
@@ -595,7 +649,7 @@ int main(int, char **) {
         renderText(renderer, font, rotBuf, 50, 98);
 
         SDL_RenderPresent(renderer);
-        
+
         // ⑧ Remove SDL_Delay — SDL_RenderPresent handles vsync
         // SDL_Delay(16);   // ← removed
 
