@@ -1,5 +1,9 @@
-update: cpu AA fixed with custom rgb value.
-( note: cpu AA is not for good performance and will break on heavy mesh, but OpenGl/Vulkan are not the purpose for now, the goal is a minimal visualizer of matrix view transformation in an sdl context )
+update:
+      added furstum cliping for lines drawing ( this code is a proto design ) 
+      and must NOT be use as an academic blue print ... 
+      it's just my personal experimentations about view matrices and perspective projection 
+      in full transparency open source of what i'm doing... futher more, things will 
+      and must be refactored any time soon so it's may be an hard time to track what im doing ).
 
 Minimal C++ code about visual matrices.
 
