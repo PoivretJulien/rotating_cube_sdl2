@@ -14,6 +14,14 @@
 #include <string>
 #include <vector>
 
+/*
+  Todo:
+  as it is the reaactivity of the line is break by sdl it self (when i wait for event...)
+  i need to more testing, but so far... the slow dwown is not 
+  related neither to the text drawing or the cube edge drawing that is not cpp issue
+  so how could i get a better reactivity ON event with sdl is the question ? 
+*/
+
 // Constants for the cube definition and window size
 const int WINDOW_WIDTH = 800;
 const int WINDOW_HEIGHT = 600;
@@ -32,20 +40,20 @@ struct SDLPoint {
 // ---------------------------------------------------------------------------
 struct Point3D {
   float x, y, z;
+
   inline Point3D to_opengl() { return {x, z, y}; }
+
   inline void scale(float factor) {
     x *= factor;
     y *= factor;
     z *= factor;
   }
+
   Point3D operator*(float const factor) {
     return {x * factor, y * factor, z * factor};
   }
 };
 
-// ---------------------------------------------------------------------------
-// convertProposal — NDC → pixel with precomputed constants, floor, and clamp
-// ---------------------------------------------------------------------------
 constexpr float HALF_WIDTH = WINDOW_WIDTH * 0.5f;
 constexpr float HALF_HEIGHT = WINDOW_HEIGHT * 0.5f;
 
@@ -117,8 +125,8 @@ static void renderText(SDL_Renderer *renderer, TTF_Font *font, char &text,
  *    expanded by ±2 pixels on each side. The box is clamped to the framebuffer
  *    boundaries so no out-of-bounds memory access occurs.
  *
- * 3. **Per-pixel evaluation** — Iterates over every pixel inside the bounding box.
- *    For each pixel:
+ * 3. **Per-pixel evaluation** — Iterates over every pixel inside the bounding
+ * box. For each pixel:
  *
  *    a. **Closest point on segment** — Projects the pixel center (x+0.5, y+0.5)
  *       onto the line segment using parametric form:
@@ -141,7 +149,8 @@ static void renderText(SDL_Renderer *renderer, TTF_Font *font, char &text,
  *       The result is written back as an RGBA8888 uint32 in little-endian
  *       byte order (R in the highest byte).
  *
- * @param pixels  Pointer to the top-left pixel of the framebuffer (RGBA8888, 4 bytes per pixel).
+ * @param pixels  Pointer to the top-left pixel of the framebuffer (RGBA8888, 4
+ * bytes per pixel).
  * @param pitch   Number of bytes per row (stride).
  * @param width   Framebuffer width in pixels.
  * @param height  Framebuffer height in pixels.
@@ -154,96 +163,83 @@ static void renderText(SDL_Renderer *renderer, TTF_Font *font, char &text,
  * @param b       Blue component (0-255).
  * @param a       Alpha component (0-255).
  */
-static void drawAALineCore(
-    uint8_t* pixels, int pitch, int width, int height,
-    float x1, float y1, float x2, float y2,
-    uint8_t r, uint8_t g, uint8_t b, uint8_t a)
-{
-    float dx = x2 - x1;
-    float dy = y2 - y1;
-    float len2 = dx*dx + dy*dy;
+static void drawAALineCore(uint8_t *pixels, int pitch, int width, int height,
+                           float x1, float y1, float x2, float y2, uint8_t r,
+                           uint8_t g, uint8_t b, uint8_t a) {
+  float dx = x2 - x1;
+  float dy = y2 - y1;
+  float len2 = dx * dx + dy * dy;
 
-    if (len2 < 1e-6f)
-        return;
+  if (len2 < 1e-6f)
+    return;
 
-    float minXf = std::min(x1, x2) - 2.0f;
-    float maxXf = std::max(x1, x2) + 2.0f;
-    float minYf = std::min(y1, y2) - 2.0f;
-    float maxYf = std::max(y1, y2) + 2.0f;
+  float minXf = std::min(x1, x2) - 2.0f;
+  float maxXf = std::max(x1, x2) + 2.0f;
+  float minYf = std::min(y1, y2) - 2.0f;
+  float maxYf = std::max(y1, y2) + 2.0f;
 
-    int minX = std::max(0, int(std::floor(minXf)));
-    int maxX = std::min(width  - 1, int(std::ceil (maxXf)));
-    int minY = std::max(0, int(std::floor(minYf)));
-    int maxY = std::min(height - 1, int(std::ceil (maxYf)));
+  int minX = std::max(0, int(std::floor(minXf)));
+  int maxX = std::min(width - 1, int(std::ceil(maxXf)));
+  int minY = std::max(0, int(std::floor(minYf)));
+  int maxY = std::min(height - 1, int(std::ceil(maxYf)));
 
-    for (int y = minY; y <= maxY; ++y) {
-        uint8_t* row = pixels + y * pitch;
+  for (int y = minY; y <= maxY; ++y) {
+    uint8_t *row = pixels + y * pitch;
 
-        for (int x = minX; x <= maxX; ++x) {
+    for (int x = minX; x <= maxX; ++x) {
 
-            float px = x + 0.5f;
-            float py = y + 0.5f;
+      float px = x + 0.5f;
+      float py = y + 0.5f;
 
-            float t = ((px - x1)*dx + (py - y1)*dy) / len2;
-            t = std::clamp(t, 0.0f, 1.0f);
+      float t = ((px - x1) * dx + (py - y1) * dy) / len2;
+      t = std::clamp(t, 0.0f, 1.0f);
 
-            float cx = x1 + dx * t;
-            float cy = y1 + dy * t;
+      float cx = x1 + dx * t;
+      float cy = y1 + dy * t;
 
-            float dist2 = (px - cx)*(px - cx) + (py - cy)*(py - cy);
+      float dist2 = (px - cx) * (px - cx) + (py - cy) * (py - cy);
 
-            if (dist2 < AA_RADIUS_SQ) {
+      if (dist2 < AA_RADIUS_SQ) {
 
-                float alpha = std::exp(-3.0f * dist2 / AA_RADIUS_SQ) * (a / 255.0f);
-                if (alpha <= 0.01f)
-                    continue;
+        float alpha = std::exp(-3.0f * dist2 / AA_RADIUS_SQ) * (a / 255.0f);
+        if (alpha <= 0.01f)
+          continue;
 
-                uint32_t* p = (uint32_t*)(row + x * 4);
-                uint32_t dst = *p;
+        uint32_t *p = (uint32_t *)(row + x * 4);
+        uint32_t dst = *p;
 
-                uint8_t dr = (dst >> 24) & 0xFF;
-                uint8_t dg = (dst >> 16) & 0xFF;
-                uint8_t db = (dst >> 8)  & 0xFF;
-                uint8_t da = (dst)       & 0xFF;
+        uint8_t dr = (dst >> 24) & 0xFF;
+        uint8_t dg = (dst >> 16) & 0xFF;
+        uint8_t db = (dst >> 8) & 0xFF;
+        uint8_t da = (dst) & 0xFF;
 
-                float inv = 1.0f - alpha;
+        float inv = 1.0f - alpha;
 
-                uint8_t rr = uint8_t(r * alpha + dr * inv);
-                uint8_t gg = uint8_t(g * alpha + dg * inv);
-                uint8_t bb = uint8_t(b * alpha + db * inv);
-                uint8_t aa = uint8_t(a * alpha + da * inv);
+        uint8_t rr = uint8_t(r * alpha + dr * inv);
+        uint8_t gg = uint8_t(g * alpha + dg * inv);
+        uint8_t bb = uint8_t(b * alpha + db * inv);
+        uint8_t aa = uint8_t(a * alpha + da * inv);
 
-                *p = (rr << 24) | (gg << 16) | (bb << 8) | aa;
-            }
-        }
+        *p = (rr << 24) | (gg << 16) | (bb << 8) | aa;
+      }
     }
+  }
 }
 
-static void drawAALineOnPixels(
-    uint8_t* pixels, int pitch, int width, int height,
-    int x1, int y1, int x2, int y2,
-    uint8_t r, uint8_t g, uint8_t b, uint8_t a)
-{
-    drawAALineCore(
-        pixels, pitch, width, height,
-        float(x1), float(y1), float(x2), float(y2),
-        r, g, b, a
-    );
+static inline void drawAALineOnPixels(uint8_t *pixels, int pitch, int width,
+                                      int height, int x1, int y1, int x2,
+                                      int y2, uint8_t r, uint8_t g, uint8_t b,
+                                      uint8_t a) {
+  drawAALineCore(pixels, pitch, width, height, float(x1), float(y1), float(x2),
+                 float(y2), r, g, b, a);
 }
 
-void drawAALineOnPixels(
-    uint8_t* pixels, int pitch, int width, int height,
-    float x1f, float y1f, float x2f, float y2f,
-    uint8_t r, uint8_t g, uint8_t b, uint8_t a)
-{
-    drawAALineCore(
-        pixels, pitch, width, height,
-        x1f, y1f, x2f, y2f,
-        r, g, b, a
-    );
+static inline void drawAALineOnPixels(uint8_t *pixels, int pitch, int width,
+                                      int height, float x1f, float y1f,
+                                      float x2f, float y2f, uint8_t r,
+                                      uint8_t g, uint8_t b, uint8_t a) {
+  drawAALineCore(pixels, pitch, width, height, x1f, y1f, x2f, y2f, r, g, b, a);
 }
-
-
 
 // ---------------------------------------------------------------------------
 // drawCubeEdgesOnPixels — render a wireframe cube directly into a pixel buffer
@@ -420,7 +416,7 @@ static void drawCubeEdgesOnPixels(uint8_t *pixels, int pitch, int width,
 }
 
 Uint32 WAKE_EVENT = SDL_RegisterEvents(1);
-void WakeEventLoop(void) {
+inline void WakeEventLoop(void) {
   SDL_Event ev;
   // Remove old wake events
   while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, WAKE_EVENT, WAKE_EVENT) > 0) {
@@ -450,7 +446,7 @@ int main(int, char **) {
 
   // ---- Window & Renderer ----------------------------------------------
   SDL_Window *window =
-      SDL_CreateWindow("View Matrix Resolution", SDL_WINDOWPOS_UNDEFINED,
+      SDL_CreateWindow("View Matrix Study", SDL_WINDOWPOS_UNDEFINED,
                        SDL_WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT, 0);
   if (!window) {
     std::cerr << "Window failed: " << SDL_GetError() << '\n';
@@ -477,11 +473,12 @@ int main(int, char **) {
                                            WINDOW_WIDTH, WINDOW_HEIGHT);
 
   // ---- Geometry -------------------------------------------------------------
-  // z is up there (cpp zero cost abstraction is use later to conform to openGL)
+  //( z is up there, cxx zero cost abstraction is use later to conform to openGL)
   std::vector<Point3D> my_geometry{
       {1, -1, 0},       {1, 1, 0},       {-1, 1, 0},       {-1, -1, 0},
       {.01, -.01, 2.5}, {.01, .01, 2.5}, {-.01, .01, 2.5}, {-.01, -.01, 2.5},
   };
+
   for (auto &v : my_geometry)
     v = v.to_opengl() *
         (CUBE_SIZE * 0.25f); // yz swap optimized at compile time.
@@ -558,14 +555,17 @@ int main(int, char **) {
           break;
         }
       } else if (e.type == SDL_MOUSEMOTION) {
-        mouseX = e.motion.x;
-        mouseY = e.motion.y;
-        if (((mouseX >= 164) && (mouseX <= 617)) &&
+            SDL_Event flush;
+            while (SDL_PeepEvents(&flush, 1, SDL_GETEVENT, SDL_MOUSEMOTION, SDL_MOUSEMOTION) > 0) {
+                mouseX = flush.motion.x;
+                mouseY = flush.motion.y;
+            }
+            if (((mouseX >= 164) && (mouseX <= 617)) &&
             ((mouseY >= 135) && (mouseY <= 494))) {
-          cursor_in_zone = true;
-        } else {
-          cursor_in_zone = false;
-        }
+              cursor_in_zone = true;
+            } else {
+              cursor_in_zone = false;
+            } 
       }
 
       /*
@@ -614,9 +614,11 @@ int main(int, char **) {
         int pitch;
         SDL_LockTexture(cubeTex, nullptr, &pixels, &pitch);
         std::memset(pixels, 0, pitch * WINDOW_HEIGHT); // clear
+
         drawCubeEdgesOnPixels((uint8_t *)pixels, pitch, WINDOW_WIDTH,
                               WINDOW_HEIGHT, my_geometry, screenPoints,
                               viewMatrix, projectionMatrix);
+
 
         SDL_UnlockTexture(cubeTex);
         SDL_RenderCopy(renderer, cubeTex, nullptr, nullptr); // single blit
@@ -639,11 +641,13 @@ int main(int, char **) {
         renderText(renderer, font, b, 50, 62);
         renderText(renderer, font, c, 50, 74);
         renderText(renderer, font, d, 50, 86);
+
         // Zero-allocation formatting into a static buffer (avoids per-frame
         // heap alloc)
         auto rotResult =
             std::format_to_n(rotBuf, sizeof(rotBuf), "rotation: {:5.1f} deg",
                              (angle * 360) / (M_PI * 2));
+
         if (rotResult.size < sizeof(rotBuf))
           *rotResult.out = '\0';
         renderText(renderer, font, rotBuf, 50, 98);
